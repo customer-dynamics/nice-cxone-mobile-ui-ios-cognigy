@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -51,7 +51,7 @@ struct AudioMessageCell: View, Themed {
     
     @Environment(\.colorScheme) var scheme
     
-    @ObservedObject var audioPlayer: AudioPlayer
+    @StateObject private var audioPlayer: AudioPlayer
     
     private let message: ChatMessage
     private let item: AttachmentItem
@@ -64,8 +64,7 @@ struct AudioMessageCell: View, Themed {
         self.item = item
         self.position = position
         
-        self.audioPlayer = AudioPlayer(url: item.url, fileName: item.fileName, alertType: alertType, chatLocalization: localization)
-        self.audioPlayer.prepare()
+        _audioPlayer = StateObject(wrappedValue: AudioPlayer(url: item.url, fileName: item.fileName, alertType: alertType, chatLocalization: localization))
     }
 
     // MARK: - Builder
@@ -82,6 +81,11 @@ struct AudioMessageCell: View, Themed {
             .padding(.bottom, Constants.Padding.elementsBottom)
             .messageChatStyle(message, position: position)
             .shareable(message, attachments: [item], spacerLength: Constants.Spacing.shareButtonMinLength)
+        }
+        .task {
+            #if !targetEnvironment(simulator)
+            await audioPlayer.prepare()
+            #endif
         }
     }
 }
@@ -212,13 +216,15 @@ private extension AudioMessageCell {
 // MARK: - Previews
 
 #Preview {
+    let localization = ChatLocalization()
+
     VStack(spacing: 4) {
         AudioMessageCell(
             message: MockData.audioMessage(user: MockData.customer),
             item: MockData.audioItem,
             position: .single,
             alertType: .constant(nil),
-            localization: ChatLocalization()
+            localization: localization
         )
         
         AudioMessageCell(
@@ -226,7 +232,7 @@ private extension AudioMessageCell {
             item: MockData.audioItem,
             position: .single,
             alertType: .constant(nil),
-            localization: ChatLocalization()
+            localization: localization
         )
     }
     .padding(.horizontal, 10)

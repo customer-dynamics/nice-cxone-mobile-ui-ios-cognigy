@@ -23,9 +23,9 @@
 
 // MARK: - Alert
 "chatui_alert_disconnect_confirm" = "Disconnect";
-"chatui_alert_updateThreadName_title" = "Update conversation name";
+"chatui_alert_updateThreadName_title" = "Rename Conversation";
 "chatui_alert_updateThreadName_placeholder" = "Conversation name";
-"chatui_alert_editPrechatCustomFields_title" = "Edit custom field(s)";
+"chatui_alert_editPrechatCustomFields_title" = "Edit Pre-chat Form";
 "chatui_alert_genericError_message" = "Something went wrong. Please, try again later.";
 "chatui_alert_disconnectError_message" = "Oops! The chat encountered an issue and will disconnect. Please try again later.";
 "chatui_alert_endConverastion_message" = "Are you sure you want to end this conversation?";
@@ -55,6 +55,7 @@
 "chatui_chat_fallbackMessage_torm_richLink" = "Rich link message";
 "chatui_chat_fallbackMessage_torm_quickReplies" = "Quick replies message";
 "chatui_chat_fallbackMessage_torm_listPicker" = "List picker message";
+"chatui_chat_fallbackMessage_torm_timePicker" = "Time picker message";
 "chatui_chat_fallbackMessage_unknown" = "Unknown message";
 "chatui_chat_fallbackMessage_noName" = "No name";
 "chatui_chat_fallbackMessage_unknown_tooltip_text" = "Why do I see this";
@@ -84,16 +85,16 @@
 "chatui_chat_attachments_download_document_error" = "Error downloading file";
 
 // MARK: - Chat - Menu Actions
-"chatui_chat_menuOption_updateName" = "Update conversation name";
-"chatui_chat_menuOption_endConversation" = "End conversation";
+"chatui_chat_menuOption_updateName" = "Rename Conversation";
+"chatui_chat_menuOption_endConversation" = "End Conversation";
 "chatui_chat_menuOption_sendTranscript" = "Send Transcript";
 
 // MARK: - Chat - Message: TORM
+"chatui_chat_message_richContent_pressToOpen" = "Press to open";
 "chatui_chat_message_richContent_optionSelected" = "Option selected";
 "chatui_chat_message_richContent_optionsDisabled" = "Options unavailable";
 "chatui_chat_message_richContent_optionsDisabled_tooltip" = "These options are no longer visible because you've already responded or the message is no longer the most recent.";
 "chatui_chat_message_listPicker_sheet_confirm" = "Done";
-"chatui_chat_message_listPicker_pressToOpen" = "Press to open";
 "chatui_chat_message_quickReplies_selectOneOption" = "Select one option below";
 
 // MARK: - LiveChat - Offline
@@ -127,3 +128,10 @@
 "chatui_sendTranscript_email_placeholder" = "Enter your e-mail address";
 "chatui_sendTranscript_confirmEmail_label" = "Confirm e-mail";
 "chatui_sendTranscript_confirmEmail_placeholder" = "Confirm your e-mail address";
+
+// MARK: - Form - Time Picker
+"chatui_form_timePicker_subtitle" = "Please select a preferred time slot";
+"chatui_form_timePicker_timeSlot_duration" = "%d min";
+
+// MARK: - Message
+"chatui_message_timePicker_formatted" = "%@, %@ min";

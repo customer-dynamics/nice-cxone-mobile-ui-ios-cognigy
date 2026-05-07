@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -68,15 +68,15 @@ struct MultipleAttachmentDocumentView: View, Themed {
         self.url = attachmentItem.url
         self.isSenderAgent = isSenderAgent
         self.localization = localization
-        
+
         self._documentStateViewModel = StateObject(wrappedValue: DocumentStateViewModel(alertType: alertType, localization: localization))
-        self._pdfViewModel = StateObject(wrappedValue: PDFViewModel(attachmentItem: attachmentItem))
+        self._pdfViewModel = StateObject(wrappedValue: PDFViewModel(attachmentItem: attachmentItem, alertType: alertType, localization: localization))
     }
     // MARK: - Builder
     
     var body: some View {
         Button {
-            if documentStateViewModel.localURL != nil {
+            if case .loaded = documentStateViewModel.loadingState {
                 documentStateViewModel.isReadyToPresent = true
             } else {
                 Task {
@@ -96,8 +96,8 @@ struct MultipleAttachmentDocumentView: View, Themed {
         }
         .frame(width: displayMode.size.width, height: displayMode.size.height)
         .sheet(isPresented: $documentStateViewModel.isReadyToPresent) {
-            if let localURL = documentStateViewModel.localURL {
-                QuickLookPreview(url: localURL, isPresented: $documentStateViewModel.isReadyToPresent)
+            if case .loaded(let url) = documentStateViewModel.loadingState {
+                QuickLookPreview(url: url, isPresented: $documentStateViewModel.isReadyToPresent)
             }
         }
     }
@@ -121,28 +121,23 @@ private extension MultipleAttachmentDocumentView {
             fileWithExtensionLabelView(fileExtension)
         default:
             AttachmentLoadingView(
-                title: localization.loadingDoc,
                 width: displayMode.size.width,
                 height: displayMode.size.height
             )
         }
     }
     
+    @ViewBuilder
     func fileWithExtensionLabelView(_ fileExtension: String) -> some View {
-        ZStack {
-            if documentStateViewModel.isDownloading {
-                AttachmentLoadingView(
-                    title: localization.loadingDoc,
-                    width: displayMode.size.width,
-                    height: displayMode.size.height
-                )
-            } else {
+        switch documentStateViewModel.loadingState {
+        case .loaded:
+            ZStack {
                 Asset.Images.blankFile.swiftUIImage
                     .resizable()
                     .foregroundStyle(colors.background.default)
                     .padding(.horizontal, Constants.Padding.blankFileHorizontal)
                     .padding(.vertical, Constants.Padding.blankFileVertical)
-                
+
                 Text(fileExtension.uppercased())
                     .font(.caption2)
                     .bold()
@@ -156,6 +151,16 @@ private extension MultipleAttachmentDocumentView {
                             .fill(colors.brand.primary)
                     }
             }
+        case .failed:
+            AttachmentFailedView(
+                width: displayMode.size.width,
+                height: displayMode.size.height
+            )
+        case .initial, .loading:
+            AttachmentLoadingView(
+                width: displayMode.size.width,
+                height: displayMode.size.height
+            )
         }
     }
 }

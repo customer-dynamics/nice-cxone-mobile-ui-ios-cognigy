@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -31,6 +31,7 @@ class ThreadViewModel: ObservableObject {
     @Published var hasMoreMessagesToLoad = true
     @Published var typingAgent: ChatUser?
     @Published var isUserTyping = false
+    @Published var isSendingMessage = false
     @Published var isEditingThreadName = false
     @Published var threadName: String = ""
     @Published var positionInQueue: Int?
@@ -53,7 +54,7 @@ class ThreadViewModel: ObservableObject {
     private var isEndConversationShown = false
     private var isThreadPermanentlyClosed = false
 
-    private static let groupInterval: TimeInterval = 120
+    private static let groupInterval = MessageGroup.defaultGroupingInterval
 
     // MARK: - Init
 
@@ -238,12 +239,10 @@ extension ThreadViewModel {
             guard let self else {
             	return
 	        }
-        
-            // Show loading overlay when attachments are being uploaded
-            if !attachments.isEmpty {
-                await self.containerViewModel?.showLoading(message: localization.chatAttachmentsUpload)
-            }
             
+            // Set loading state for contextual loading indicator
+            self.isSendingMessage = true
+
             let message: OutboundMessage
             
             switch messageType {
@@ -253,18 +252,20 @@ extension ThreadViewModel {
                 message = OutboundMessage(text: "", attachments: [AttachmentItemMapper.map(item)], postback: postback)
             default:
                 LogManager.info("Trying to send message of unexpected type - \(messageType)")
+                self.isSendingMessage = false
                 return
             }
             
             do {
                 try await threadProvider.send(message)
-                
-                await self.containerViewModel?.hideOverlay()
+
+                // Clear loading state after successful send
+                self.isSendingMessage = false
             } catch {
                 error.logError()
-             
-                // Hide uploading overlay
-                await self.containerViewModel?.hideOverlay()
+
+                // Clear loading state on error
+                self.isSendingMessage = false
                 
                 switch error {
                 case CXoneChatError.invalidFileType:
@@ -308,14 +309,24 @@ extension ThreadViewModel {
         }
     }
     
-    func onRichMessageElementSelected(textToSend: String?, element: RichMessageSubElementType) {
+    func onRichMessageElementSelected(element: RichMessageSubElementType) {
         LogManager.trace("Did select rich content message")
-        
+
+        // Currently `.button` and `.timeSlot` are supported (and used)
+        let textToSend: String? = switch element {
+        case .button(let entity):
+            entity.title
+        case .timeSlot(let entity):
+            entity.formattedDescription(localization: localization)
+        default:
+            nil
+        }
+
         guard let textToSend else {
             LogManager.error("Unable to send rich message content - textToSend is nil")
             return
         }
-        
+
         onSendMessage(.text(textToSend), attachments: [], postback: element.postback)
     }
     
@@ -562,7 +573,7 @@ private extension ThreadViewModel {
         self.messageGroups = updatedThread?
             .messages
             .map { ChatMessageMapper.map($0, localization: localization) }
-            .groupMessages(interval: Self.groupInterval)
+            .groupMessages(interval: MessageGroup.defaultGroupingInterval)
         ?? []
         
         // Log the number of messages grouped and set additional custom fields if needed
@@ -663,8 +674,12 @@ private extension ThreadViewModel {
             // If the thread is not ready and position in queue is not set, we want to show loading overlay
             flowContinues = false
             return
-        } else if updatedThread?.state == .ready || (updatedThread?.state != .closed && updatedThread?.positionInQueue != nil), !isEndConversationShown {
-            // Hide the loading overlay if the thread is ready or position in queue is set and EndConversation view is not being shown
+        } else if updatedThread?.state == .ready
+                    || (updatedThread?.state != .closed && updatedThread?.positionInQueue != nil),
+                  !isEndConversationShown,
+                  !isShowingInactivityPopup {
+            // Hide the loading overlay if the thread is ready or position in queue is set,
+            // and neither the EndConversation view nor inactivity popup is being shown
             await containerViewModel?.hideOverlay()
         }
         
@@ -674,7 +689,9 @@ private extension ThreadViewModel {
     @MainActor
     func reloadThread(with id: String) async {
         LogManager.trace("Recovering thread with id: \(id)")
+        
         await containerViewModel?.showLoading(message: localization.commonLoading)
+        
         do {
             try await chatProvider.threads.load(with: id)
         } catch {
@@ -685,6 +702,7 @@ private extension ThreadViewModel {
                 }
             }
         }
+        
         await containerViewModel?.hideOverlay()
 
         // Reset the recovery flag to allow future recovery attempts

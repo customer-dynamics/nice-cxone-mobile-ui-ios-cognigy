@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -20,17 +20,25 @@ class SendTranscriptFormViewModel: FormViewModel<Bool>, Overlayable {
     
     // MARK: - Properties
     
-    @Published var overlay: (() -> AnyView)?
     @Published var emailEntity: TextFieldEntity
     @Published var confirmationEntity: TextFieldEntity
+    
+    @Binding var overlay: (() -> AnyView)?
     
     let chatLocalization: ChatLocalization
     let chatThread: ChatThread
     
     // MARK: - Init
     
-    init(chatThread: ChatThread, chatLocalization: ChatLocalization, onFinished: @escaping (Bool) -> Void, onCancel: @escaping () -> Void) {
+    init(
+        chatThread: ChatThread,
+        overlay: Binding<(() -> AnyView)?>,
+        chatLocalization: ChatLocalization,
+        onFinished: @escaping (Bool) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         self.chatThread = chatThread
+        self._overlay = overlay
         self.chatLocalization = chatLocalization
         self.emailEntity = TextFieldEntity(
             label: chatLocalization.sendTranscriptEmailLabel,
@@ -81,24 +89,6 @@ class SendTranscriptFormViewModel: FormViewModel<Bool>, Overlayable {
     }
 }
 
-// MARK: - Internal Methods
-
-extension SendTranscriptFormViewModel {
-    
-    @MainActor
-    func showLoading(message: String, action: (() async -> Void)? = nil, file: StaticString = #file, line: UInt = #line) async {
-        LogManager.trace("Showing loading overlay", file: file, line: line)
-        
-        await showOverlay(file: file, line: line) {
-            ChatLoadingOverlay(text: message) {
-                Task { @MainActor in
-                    await action?()
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Private methods
 
 private extension SendTranscriptFormViewModel {
@@ -123,5 +113,18 @@ private extension SendTranscriptFormViewModel {
         await hideOverlay()
         
         return isSuccessful
+    }
+    
+    @MainActor
+    func showLoading(message: String, action: (() async -> Void)? = nil, file: StaticString = #file, line: UInt = #line) async {
+        LogManager.trace("Showing loading overlay", file: file, line: line)
+        
+        await showOverlay({
+            ChatLoadingOverlay(text: message) {
+                Task { @MainActor in
+                    await action?()
+                }
+            }
+        }, file: file, line: line)
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,10 +8,11 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
+// swiftlint:disable identifier_name
 
 import CXoneChatSDK
 import Foundation
@@ -56,6 +57,7 @@ public class ChatLocalization: ObservableObject {
     /// "No Agent"
     public lazy var commonUnassignedAgent = lookup(key: "chatui_common_unassigned_agent")
     /// "Connecting..."
+    @available(*, deprecated, message: "No longer used. Will be removed in a future release")
     public lazy var commonConnecting = lookup(key: "chatui_common_connecting")
     /// "Loading..."
     public lazy var commonLoading = lookup(key: "chatui_common_loading")
@@ -72,11 +74,11 @@ public class ChatLocalization: ObservableObject {
     
     /// "Disconnect"
     public lazy var alertDisconnectConfirm = lookup(key: "chatui_alert_disconnect_confirm")
-    /// "Update thread name"
+    /// "Rename Conversation"
     public lazy var alertUpdateThreadNameTitle = lookup(key: "chatui_alert_updateThreadName_title")
-    /// "Thread name"
+    /// "Conversation name"
     public lazy var alertUpdateThreadNamePlaceholder = lookup(key: "chatui_alert_updateThreadName_placeholder")
-    /// "Edit custom field(s)"
+    /// "Edit Pre-chat Form"
     public lazy var alertEditPrechatCustomFieldsTitle = lookup(key: "chatui_alert_editPrechatCustomFields_title")
     /// "Something went wrong. Please, try again later."
     public lazy var alertGenericErrorMessage = lookup(key: "chatui_alert_genericError_message")
@@ -108,9 +110,9 @@ public class ChatLocalization: ObservableObject {
     
     // MARK: - ChatListView
     
-    /// "Threads"
+    /// "Conversations"
     public lazy var chatListTitle = lookup(key: "chatui_chatList_title")
-    /// "No threads"
+    /// "No conversations"
     public lazy var chatListEmpty = lookup(key: "chatui_chatList_empty")
     /// "Current"
     public lazy var chatListThreadStatusArchived = lookup(key: "chatui_chatList_threadStatus_archived")
@@ -133,6 +135,8 @@ public class ChatLocalization: ObservableObject {
     public lazy var chatFallbackMessageTORMQuickReplies = lookup(key: "chatui_chat_fallbackMessage_torm_quickReplies")
     /// "List picker message"
     public lazy var chatFallbackMessageTORMListPicker = lookup(key: "chatui_chat_fallbackMessage_torm_listPicker")
+    /// "Time picker message"
+    public lazy var chatFallbackMessageTORMTimePicker = lookup(key: "chatui_chat_fallbackMessage_torm_timePicker")
     /// "Unknown message"
     public lazy var chatFallbackMessageUnknown = lookup(key: "chatui_chat_fallbackMessage_unknown")
     /// "Why do I see this"
@@ -178,8 +182,10 @@ public class ChatLocalization: ObservableObject {
     /// "Uploading..."
     public lazy var chatAttachmentsUpload = lookup(key: "chatui_chat_attachments_upload")
     /// "Loading document.."
+    @available(*, deprecated, message: "No longer used. Will be removed in a future major version.")
     public lazy var loadingDoc = lookup(key: "chatui_chat_attachments_loading_document")
     /// "Loading video..."
+    @available(*, deprecated, message: "No longer used. Will be removed in a future major version.")
     public lazy var loadingVideo = lookup(key: "chatui_chat_attachments_loading_video")
     /// "Loading document failed"
     public lazy var loadingDocError = lookup(key: "chatui_chat_attachments_loading_document_error")
@@ -188,9 +194,9 @@ public class ChatLocalization: ObservableObject {
     
     // MARK: - Chat - Menu Actions
     
-    /// "Update conversation name"
+    /// "Rename Conversation"
     public lazy var chatMenuOptionUpdateName = lookup(key: "chatui_chat_menuOption_updateName")
-    /// "End conversation"
+    /// "End Conversation"
     public lazy var chatMenuOptionEndConversation = lookup(key: "chatui_chat_menuOption_endConversation")
     /// "Send Transcript"
     public lazy var chatMenuOptionSendTranscript = lookup(key: "chatui_chat_menuOption_sendTranscript")
@@ -203,11 +209,14 @@ public class ChatLocalization: ObservableObject {
     public lazy var chatMessageRichContentOptionsDisabled = lookup(key: "chatui_chat_message_richContent_optionsDisabled")
     /// "These options are no longer visible because you've already responded or the message is no longer the most recent."
     public lazy var chatMessageRichContentOptionsDisabledTooltip = lookup(key: "chatui_chat_message_richContent_optionsDisabled_tooltip")
-    // swiftlint:disable:previous identifier_name
     /// "Done"
+    @available(*, deprecated, message: "Replaced with `commonSubmit`")
     public lazy var chatMessageListPickerSheetConfirm = lookup(key: "chatui_chat_message_listPicker_sheet_confirm")
     /// "Press to open"
+    @available(*, deprecated, message: "Replaced with `chatMessageRichContentPressToOpen`")
     public lazy var chatMessageListPickerPressToOpen = lookup(key: "chatui_chat_message_listPicker_pressToOpen")
+    /// "Press to open"
+    public lazy var chatMessageRichContentPressToOpen = lookup(key: "chatui_chat_message_richContent_pressToOpen")
     /// "Select one option below"
     public lazy var chatMessageQuickRepliesSelectOneOption = lookup(key: "chatui_chat_message_quickReplies_selectOneOption")
     
@@ -268,6 +277,18 @@ public class ChatLocalization: ObservableObject {
     /// "Confirm your email address"
     public lazy var sendTranscriptConfirmEmailPlaceholder = lookup(key: "chatui_sendTranscript_confirmEmail_placeholder")
     
+    // MARK: - Form - Time Picker
+    
+    /// "Please select a preferred time slot"
+    public lazy var formTimePickerSubtitle = lookup(key: "chatui_form_timePicker_subtitle")
+    /// "%d min"
+    public lazy var formTimePickerTimeSlotDuration = lookup(key: "chatui_form_timePicker_timeSlot_duration")
+    
+    // MARK: - Message
+    
+    /// "%@, %@ min"
+    public lazy var messageTimePickerFormatted = lookup(key: "chatui_message_timePicker_formatted")
+    
     // MARK: - Init
 
     public init(bundle: Bundle = .main, tablename: String = "CXOneChatUI") {
@@ -299,3 +320,4 @@ extension ChatLocalization {
         }
     }
 }
+// swiftlint:enable identifier_name

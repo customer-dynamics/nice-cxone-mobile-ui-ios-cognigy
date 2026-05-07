@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -67,7 +67,7 @@ struct DocumentCellDocumentThumbnailView: View, Themed {
     @ViewBuilder
     var body: some View {
         Button {
-            if viewModel.localURL != nil {
+            if case .loaded = viewModel.loadingState {
                 viewModel.isReadyToPresent = true
             } else {
                 Task {
@@ -78,8 +78,8 @@ struct DocumentCellDocumentThumbnailView: View, Themed {
             buttonLabel
         }
         .sheet(isPresented: $viewModel.isReadyToPresent) {
-            if let localURL = viewModel.localURL {
-                QuickLookPreview(url: localURL, isPresented: $viewModel.isReadyToPresent)
+            if case .loaded(let url) = viewModel.loadingState {
+                QuickLookPreview(url: url, isPresented: $viewModel.isReadyToPresent)
             }
         }
     }
@@ -91,22 +91,35 @@ private extension DocumentCellDocumentThumbnailView {
     
     var buttonLabel: some View {
         ZStack {
-            Asset.Images.blankFile.swiftUIImage
-                .resizable()
-                .foregroundStyle(colors.background.default)
-            
-            Text(fileExtension.uppercased())
-                .font(.caption2)
-                .bold()
-                .foregroundStyle(colors.brand.onPrimary)
-                .truncationMode(.middle)
-                .lineLimit(Constants.Sizing.fileExtensionLineLimit)
-                .padding(.vertical, Constants.Padding.fileExtensionTextVertical)
-                .padding(.horizontal, Constants.Padding.fileExtensionTextHorizontal)
-                .background {
-                    RoundedRectangle(cornerRadius: Constants.Sizing.fileExtensionCornerRadius)
-                        .fill(colors.brand.primary)
-                }
+            switch viewModel.loadingState {
+            case .initial, .loading:
+                AttachmentLoadingView(
+                    width: displayMode.size.width,
+                    height: displayMode.size.height
+                )
+            case .loaded:
+                Asset.Images.blankFile.swiftUIImage
+                    .resizable()
+                    .foregroundStyle(colors.background.default)
+                
+                Text(fileExtension.uppercased())
+                    .font(.caption2)
+                    .bold()
+                    .foregroundStyle(colors.brand.onPrimary)
+                    .truncationMode(.middle)
+                    .lineLimit(Constants.Sizing.fileExtensionLineLimit)
+                    .padding(.vertical, Constants.Padding.fileExtensionTextVertical)
+                    .padding(.horizontal, Constants.Padding.fileExtensionTextHorizontal)
+                    .background {
+                        RoundedRectangle(cornerRadius: Constants.Sizing.fileExtensionCornerRadius)
+                            .fill(colors.brand.primary)
+                    }
+            case .failed:
+                AttachmentFailedView(
+                    width: displayMode.size.width,
+                    height: displayMode.size.height
+                )
+            }
         }
         .padding(.vertical, Constants.Padding.fileExtensionContainerVertical)
         .padding(.horizontal, Constants.Padding.fileExtensionContainerHorizontal)

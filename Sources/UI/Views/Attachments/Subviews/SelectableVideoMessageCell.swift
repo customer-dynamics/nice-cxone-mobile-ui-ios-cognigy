@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -70,16 +70,31 @@ struct SelectableVideoMessageCell: View, Themed {
             Button {
                 if inSelectionMode {
                     attachmentsViewModel.selectAttachment(with: item.id)
-                } else {
+                } else if case .loaded = viewModel.loadingState {
                     isVideoSheetVisible.toggle()
+                } else if case .failed = viewModel.loadingState {
+                    Task { @MainActor in
+                        await viewModel.cacheVideoFromURL()
+                    }
                 }
             } label: {
-                VideoThumbnailView(url: viewModel.cachedVideoURL, displayMode: displayMode)
-            }
-            .sheet(isPresented: $isVideoSheetVisible) {
-                if let videoURL = viewModel.cachedVideoURL {
-                    VideoPlayer(player: AVPlayer(url: videoURL))
-                        .ignoresSafeArea(.container)
+                switch viewModel.loadingState {
+                case .loaded(let url):
+                    VideoThumbnailView(url: url, displayMode: displayMode)
+                        .sheet(isPresented: $isVideoSheetVisible) {
+                            VideoPlayer(player: AVPlayer(url: url))
+                                .ignoresSafeArea(.container)
+                        }
+                case .failed:
+                    AttachmentFailedView(
+                        width: displayMode.size.width,
+                        height: displayMode.size.height
+                    )
+                default:
+                    AttachmentLoadingView(
+                        width: displayMode.size.width,
+                        height: displayMode.size.height
+                    )
                 }
             }
             

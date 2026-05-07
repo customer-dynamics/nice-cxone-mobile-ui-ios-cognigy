@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -73,7 +73,7 @@ struct SelectableDocumentMessageCell: View, Themed {
     ) {
         self.attachment = attachment
         self.attachmentItem = item
-        self.pdfViewModel = PDFViewModel(attachmentItem: item)
+        self.pdfViewModel = PDFViewModel(attachmentItem: item, alertType: alertType, localization: localization)
         self.attachmentsViewModel = attachmentsViewModel
         self.documentStateViewModel = DocumentStateViewModel(alertType: alertType, localization: localization)
         self._inSelectionMode = inSelectionMode
@@ -87,7 +87,7 @@ struct SelectableDocumentMessageCell: View, Themed {
                 if inSelectionMode {
                     attachmentsViewModel.selectAttachment(with: attachment.id)
                 } else {
-                    if documentStateViewModel.localURL != nil {
+                    if case .loaded = documentStateViewModel.loadingState {
                         documentStateViewModel.isReadyToPresent = true
                     } else {
                         Task {
@@ -114,8 +114,8 @@ struct SelectableDocumentMessageCell: View, Themed {
                 } else {
                     documentView
                         .sheet(isPresented: $documentStateViewModel.isReadyToPresent) {
-                            if let localURL = documentStateViewModel.localURL {
-                                QuickLookPreview(url: localURL, isPresented: $documentStateViewModel.isReadyToPresent)
+                            if case .loaded(let url) = documentStateViewModel.loadingState {
+                                QuickLookPreview(url: url, isPresented: $documentStateViewModel.isReadyToPresent)
                             }
                         }
                 }
@@ -136,33 +136,47 @@ private extension SelectableDocumentMessageCell {
     
     @ViewBuilder
     var documentView: some View {
-        Asset.Images.blankFile.swiftUIImage
-            .resizable()
-            .foregroundStyle(colors.background.surface.variant)
-            .padding(.horizontal, Constants.Padding.documentBlankHorizontal)
-            .padding(.vertical, Constants.Padding.documentBlankVertical)
-            .background {
-                RoundedRectangle(cornerRadius: StyleGuide.Sizing.Attachment.cornerRadius)
-                    .stroke(colors.border.default, lineWidth: StyleGuide.Sizing.Attachment.borderWidth)
-                    .frame(width: displayMode.size.width, height: displayMode.size.height)
-            }
-            .frame(width: displayMode.size.width, height: displayMode.size.height)
-            .ifNotNil(fileExtension) { view, fileExtension in
-                view.overlay {
-                    Text(fileExtension.uppercased())
-                        .font(.callout)
-                        .bold()
-                        .foregroundStyle(colors.brand.onPrimary)
-                        .truncationMode(.middle)
-                        .lineLimit(Constants.Sizing.fileExtensionLineLimit)
-                        .padding(.vertical, Constants.Padding.fileExtensionTextVertical)
-                        .padding(.horizontal, Constants.Padding.fileExtensionTextHorizontal)
-                        .background {
-                            RoundedRectangle(cornerRadius: Constants.Sizing.fileExtensionCornerRadius)
-                                .fill(colors.brand.primary)
-                        }
+        ZStack {
+            Asset.Images.blankFile.swiftUIImage
+                .resizable()
+                .foregroundStyle(colors.background.surface.variant)
+                .padding(.horizontal, Constants.Padding.documentBlankHorizontal)
+                .padding(.vertical, Constants.Padding.documentBlankVertical)
+                .background {
+                    RoundedRectangle(cornerRadius: StyleGuide.Sizing.Attachment.cornerRadius)
+                        .stroke(colors.border.default, lineWidth: StyleGuide.Sizing.Attachment.borderWidth)
+                        .frame(width: displayMode.size.width, height: displayMode.size.height)
                 }
+                .frame(width: displayMode.size.width, height: displayMode.size.height)
+                .ifNotNil(fileExtension) { view, fileExtension in
+                    view.overlay {
+                        Text(fileExtension.uppercased())
+                            .font(.callout)
+                            .bold()
+                            .foregroundStyle(colors.brand.onPrimary)
+                            .truncationMode(.middle)
+                            .lineLimit(Constants.Sizing.fileExtensionLineLimit)
+                            .padding(.vertical, Constants.Padding.fileExtensionTextVertical)
+                            .padding(.horizontal, Constants.Padding.fileExtensionTextHorizontal)
+                            .background {
+                                RoundedRectangle(cornerRadius: Constants.Sizing.fileExtensionCornerRadius)
+                                    .fill(colors.brand.primary)
+                            }
+                    }
+                }
+
+            if case .loading = documentStateViewModel.loadingState {
+                AttachmentLoadingView(
+                    width: displayMode.size.width,
+                    height: displayMode.size.height
+                )
+            } else if case .failed = documentStateViewModel.loadingState {
+                AttachmentFailedView(
+                    width: displayMode.size.width,
+                    height: displayMode.size.height
+                )
             }
+        }
     }
 }
 

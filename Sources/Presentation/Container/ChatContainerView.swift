@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -28,6 +28,8 @@ struct ChatContainerView: View, Themed, Alertable {
     
     @SwiftUI.Environment(\.colorScheme) var scheme
     
+    @StateObject private var overlayManager = OverlayManager()
+    
     // MARK: - Init
 
     init(viewModel: ChatContainerViewModel) {
@@ -44,8 +46,25 @@ struct ChatContainerView: View, Themed, Alertable {
                     viewModel.sheet?()
                 }
         }
+        .sheet(item: $viewModel.safariURL) { item in
+            SafariView(url: item.url)
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            if url.scheme?.contains("http") == true {
+                viewModel.safariURL = IdentifiableURL(url: url)
+                return .handled
+            } else {
+                return .systemAction
+            }
+        })
+        .tint(colors.brand.primary)
+        .background(colors.background.default)
         .onAppear(perform: viewModel.onAppear)
-        .onDisappear(perform: viewModel.onDisappear)
+        .onDisappear {
+            overlayManager.hide()
+            
+            viewModel.onDisappear()
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification),
             perform: viewModel.willEnterForeground
@@ -54,12 +73,19 @@ struct ChatContainerView: View, Themed, Alertable {
             NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification),
             perform: viewModel.didEnterBackground
         )
-        .fullScreenCover(isPresented: viewModel.isOverlayDisplayed) {
-            viewModel.overlay?()
-                .presentationWithBackgroundColor(viewModel.chatProvider.state == .offline ? colors.background.default : .clear)
+        .onChange(of: viewModel.isOverlayDisplayed.wrappedValue) { _ in
+            if let overlay = viewModel.overlay {
+                viewModel.safariURL = nil
+
+                self.overlayManager.show {
+                    overlay()
+                        .environmentObject(localization)
+                        .environmentObject(style)
+                }
+            } else {
+                overlayManager.hide()
+            }
         }
-        .tint(colors.brand.primary)
-        .background(colors.background.default)
     }
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -60,10 +60,10 @@ extension Asset {
     // MARK: - Chat Thread
     
     enum ChatThread {
-        /// `rectangle.stack.badge.person.crop`
-        static let editPrechatCustomFields = Image(systemName: "rectangle.stack.badge.person.crop")
-        /// `rectangle.and.pencil.and.ellipsis.rtl`
-        static let editThreadName = Image(systemName: "rectangle.and.pencil.and.ellipsis.rtl")
+        /// `doc.text`
+        static let editPrechatCustomFields = Image(systemName: "doc.text")
+        /// `character.cursor.ibeam`
+        static let editThreadName = Image(systemName: "character.cursor.ibeam")
         /// `gearshape`
         static let gear = Image(systemName: "gearshape")
     }
@@ -123,6 +123,8 @@ extension Asset {
         static let voiceIndicator = Image(systemName: "waveform")
         /// `play.circle.fill`
         static let playButtonSymbol = Image(systemName: "play.circle.fill")
+        /// `xmark.circle.fill`
+        static let failed = Image(systemName: "xmark.circle.fill")
     }
     
     // MARK: - LiveChat - End Conversation

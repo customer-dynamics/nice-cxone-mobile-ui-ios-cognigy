@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -54,47 +54,30 @@ extension MenuBuilder {
     }
 }
 
-// MARK: - Previews
+// MARK: - Preview
 
 @available(iOS 17.0, *)
-#Preview("one item") {
+#Preview {
     @Previewable @Environment(\.colorScheme) var scheme
     let style = ChatStyle()
-    
+    let localization = ChatLocalization()
+
     let items = [
         MenuBuilder.Item(
-            name: ChatLocalization().chatListNewThread,
-            icon: Asset.List.new
-        ) {}
-    ]
-
-    return NavigationView {
-        VStack {
-            Text("Background")
-        }
-        .navigationTitle("Page")
-        .navigationBarItems(trailing: NavigationMenuView(items: items, colors: style.colors(for: scheme)))
-    }
-}
-
-@available(iOS 17.0, *)
-#Preview("multiple items") {
-    @Previewable @Environment(\.colorScheme) var scheme
-    let style = ChatStyle()
-    
-    let items = [
-        MenuBuilder.Item(
-            name: "First",
-            icon: Asset.List.new
+            name: localization.chatMenuOptionUpdateName,
+            icon: Asset.ChatThread.editThreadName
         ) {},
         MenuBuilder.Item(
-            name: "Second",
-            icon: Asset.List.new,
-            role: .cancel
+            name: localization.alertEditPrechatCustomFieldsTitle,
+            icon: Asset.ChatThread.editPrechatCustomFields
         ) {},
         MenuBuilder.Item(
-            name: "Third",
-            icon: Asset.List.new,
+            name: localization.chatMenuOptionSendTranscript,
+            icon: Asset.sendTranscript
+        ) {},
+        MenuBuilder.Item(
+            name: localization.chatMenuOptionEndConversation,
+            icon: Asset.close,
             role: .destructive
         ) {}
     ]
