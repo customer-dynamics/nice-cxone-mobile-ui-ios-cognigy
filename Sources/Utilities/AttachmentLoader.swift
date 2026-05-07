@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -19,38 +19,70 @@ final class AttachmentLoader: ObservableObject {
     
     // MARK: - Properties
 
-    @Published var data: Data?
-    @Published var isLoading = false
+    @Published var loadingState: AttachmentLoadingState<Data> = .initial
 
     private let url: URL
     private let cacheKey: String
 
+    private var loadTask: Task<Void, Never>?
+    
     // MARK: - Initializers
 
     init(url: URL, cacheKey: String? = nil) {
         self.url = url
         self.cacheKey = cacheKey ?? url.absoluteString
+        
         load()
+    }
+
+    deinit {
+        loadTask?.cancel()
     }
 
     // MARK: - Methods
 
     func load() {
-        if let cached = AttachmentCache.shared.data(for: cacheKey) {
-            self.data = cached
-            return
-        }
-        isLoading = true
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let self, let data else {
+        loadTask?.cancel()
+
+        loadTask = Task {
+            if let cached = AttachmentCache.shared.data(for: cacheKey) {
+                await MainActor.run {
+                    self.loadingState = .loaded(cached)
+                }
                 return
             }
-            
-            AttachmentCache.shared.set(data, for: self.cacheKey)
-            DispatchQueue.main.async {
-                self.data = data
-                self.isLoading = false
+
+            await MainActor.run {
+                loadingState = .loading
             }
-        }.resume()
+
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    throw URLError(.badServerResponse)
+                }
+
+                // Fire-and-forget cache write to avoid blocking main actor
+                let cacheKey = self.cacheKey
+                Task.detached(priority: .utility) {
+                    AttachmentCache.shared.set(data, for: cacheKey)
+                }
+
+                await MainActor.run {
+                    self.loadingState = .loaded(data)
+                }
+            } catch is CancellationError {
+                // Task was cancelled, don't update state
+                return
+            } catch {
+                error.logError()
+
+                await MainActor.run {
+                    self.loadingState = .failed
+                }
+            }
+        }
+
     }
 }

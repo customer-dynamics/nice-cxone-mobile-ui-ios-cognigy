@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -43,10 +43,9 @@ class AudioRecorder: NSObject, ObservableObject {
     @Binding var alertType: ChatAlertType?
     
     private let localization: ChatLocalization
-    private let audioSession: AVAudioSession = .sharedInstance()
-    
-    private var audioRecorder: AVAudioRecorder?
-    private var audioPlayer = AVAudioPlayer()
+    private let audioSession: AudioSessionProviding
+    private let audioRecording: AudioRecordingProviding
+    private let audioPlayer: AudioPlayerProviding
     private var ticks = [AnyCancellable]()
     private var url: URL?
     
@@ -63,10 +62,21 @@ class AudioRecorder: NSObject, ObservableObject {
 
     // MARK: - Init
     
-    init(alertType: Binding<ChatAlertType?>, localization: ChatLocalization) {
+    init(
+        alertType: Binding<ChatAlertType?>,
+        localization: ChatLocalization,
+        audioSession: AudioSessionProviding = AVAudioSession.sharedInstance(),
+        audioRecording: AudioRecordingProviding = DefaultAudioRecordingProvider(),
+        audioPlayer: AudioPlayerProviding = DefaultAudioPlayerProvider()
+    ) {
         self._alertType = alertType
         self.localization = localization
+        self.audioSession = audioSession
+        self.audioRecording = audioRecording
+        self.audioPlayer = audioPlayer
         super.init()
+
+        setupDelegateCallbacks()
     }
     
     // MARK: - Methods
@@ -86,13 +96,17 @@ class AudioRecorder: NSObject, ObservableObject {
             do {
                 try self.setupRecorder()
                 
-                guard state != .recording, let audioRecorder else {
+                guard state != .recording else {
                     LogManager.error(.failed("Unable to record - already recording"))
                     return
                 }
-                
+                guard audioRecording.url != nil else {
+                    LogManager.error(.failed("Unable to record - recorder URL not set"))
+                    return
+                }
+
                 try self.audioSession.setCategory(.playAndRecord, options: .defaultToSpeaker)
-                try self.audioSession.setActive(true)
+                try self.audioSession.setActive(true, options: [])
                 
                 self.time = 0
                 
@@ -101,7 +115,7 @@ class AudioRecorder: NSObject, ObservableObject {
                     .sink { _ in self.updateTimer() }
                     .store(in: &ticks)
                 
-                audioRecorder.record()
+                audioRecording.record()
                 
                 self.state = .recording
             } catch {
@@ -147,21 +161,20 @@ class AudioRecorder: NSObject, ObservableObject {
             LogManager.error(.failed("Recording or already playing."))
             return
         }
-        guard let recorder = audioRecorder else {
+        guard let recorderUrl = audioRecording.url else {
             LogManager.error(.failed("Audio Recorder is not set"))
             return
         }
-        
-        if let url, recorder.url == url, audioPlayer.currentTime != 0 {
+
+        if let url, recorderUrl == url, audioPlayer.currentTime != 0 {
             state = .playing
             audioPlayer.play()
         } else {
             do {
-                audioPlayer = try AVAudioPlayer(contentsOf: recorder.url)
-                audioPlayer.delegate = self as AVAudioPlayerDelegate
+                try audioPlayer.loadAudio(from: recorderUrl)
                 audioPlayer.prepareToPlay()
-                
-                url = audioRecorder?.url
+
+                url = audioRecording.url
                 
                 state = .playing
                 audioPlayer.play()
@@ -221,87 +234,92 @@ class AudioRecorder: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVAudioRecorderDelegate
+// MARK: - Private methods
 
-extension AudioRecorder: AVAudioRecorderDelegate {
-    
-    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+private extension AudioRecorder {
+
+    func setupDelegateCallbacks() {
+        audioRecording.onFinishRecording = { [weak self] flag in
+            self?.handleRecordingFinished(successfully: flag)
+        }
+        audioRecording.onEncodeError = { [weak self] error in
+            self?.handleRecordingEncodeError(error)
+        }
+        audioPlayer.onFinishPlaying = { [weak self] flag in
+            self?.handlePlayingFinished(successfully: flag)
+        }
+        audioPlayer.onDecodeError = { [weak self] error in
+            self?.handlePlayingDecodeError(error)
+        }
+    }
+
+    func handleRecordingFinished(successfully flag: Bool) {
         LogManager.trace("Voice message recording did finish \(flag ? "successfully" : "unsuccessfully")")
-        
+
         ticks.cancel()
-        
+
         // Successful flag is handled in the trigger place, e.g. "delete" or "stop" method
         if !flag {
             attachmentItem = nil
-            
+
             do {
                 try eraseAudioRecorder(deleteRecording: true)
             } catch {
                 error.logError()
             }
-            
+
             state = .idle
             alertType = .genericError(localization: localization)
         }
     }
-    
-    func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+
+    func handleRecordingEncodeError(_ error: Error?) {
         LogManager.trace("Error occured during encoding")
-        
+
         error?.logError()
-        
+
         ticks.cancel()
         attachmentItem = nil
-        
+
         do {
             try eraseAudioRecorder(deleteRecording: true)
         } catch {
             error.logError()
         }
-        
+
         state = .idle
         alertType = .genericError(localization: localization)
     }
-}
 
-// MARK: - AVAudioPlayerDelegate
-
-extension AudioRecorder: AVAudioPlayerDelegate {
-    
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    func handlePlayingFinished(successfully flag: Bool) {
         LogManager.trace("Playing recorded voice message did finish \(flag ? "successfully" : "unsuccessfully")")
-        
+
         ticks.cancel()
-        
+
         if flag {
             state = .recorded
         } else {
             attachmentItem = nil
             eraseAudioPlayer()
-            
+
             state = .idle
             alertType = .genericError(localization: localization)
         }
     }
-    
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+
+    func handlePlayingDecodeError(_ error: Error?) {
         LogManager.trace("Error occured during decoding")
-        
+
         error?.logError()
-        
+
         ticks.cancel()
         attachmentItem = nil
         eraseAudioPlayer()
-        
+
         state = .idle
         alertType = .genericError(localization: localization)
     }
-}
 
-// MARK: - Private methods
-
-private extension AudioRecorder {
-    
     func eraseAudioPlayer() {
         LogManager.trace("Erasing audio player")
         
@@ -324,13 +342,13 @@ private extension AudioRecorder {
         
         length = time
         time = 0
-        audioRecorder?.stop()
-        
+        audioRecording.stop()
+
         if deleteRecording {
-            audioRecorder?.deleteRecording()
+            audioRecording.deleteRecording()
         }
-        
-        try audioSession.setActive(false)
+
+        try audioSession.setActive(false, options: [])
     }
     
     func updateTimer() {
@@ -338,11 +356,11 @@ private extension AudioRecorder {
     }
     
     func isRecordPermissionGranted() -> Bool {
-        guard AVAudioSession.sharedInstance().recordPermission != .granted else {
+        guard audioSession.recordPermission != .granted else {
             return true
         }
-        
-        if AVAudioSession.sharedInstance().recordPermission == .denied {
+
+        if audioSession.recordPermission == .denied {
             alertType = .microphonePermissionDenied(localization: localization) {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else {
                     LogManager.error("Unable to get Settings URL")
@@ -356,7 +374,7 @@ private extension AudioRecorder {
             
             return false
         } else {
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+            audioSession.requestRecordPermission { granted in
                 LogManager.trace("Record permission granted: \(granted)")
             }
             
@@ -375,15 +393,14 @@ private extension AudioRecorder {
         let recordingName = "voice_message_\(Date().formatted(format: "HH:mm:ss_dd-MM-YY")).\(Self.currentAudioFile.extension)"
         let bundle = cachesDirectory.appendingPathComponent(recordingName)
         
-        let settings = [
+        let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 12000,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
-        audioRecorder = try AVAudioRecorder(url: bundle, settings: settings)
-        audioRecorder?.delegate = self as AVAudioRecorderDelegate
-        url = audioRecorder?.url
+        try audioRecording.setupRecorder(url: bundle, settings: settings)
+        url = audioRecording.url
         attachmentItem = AttachmentItem(url: bundle, friendlyName: recordingName, mimeType: bundle.mimeType, fileName: recordingName)
     }
     

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -26,7 +26,9 @@ class AudioPlayer: NSObject, ObservableObject {
     @Published var formattedDuration: String
     @Published var formattedProgress: String
     
-    private let audioSession: AVAudioSession = .sharedInstance()
+    private let audioSession: AudioSessionProviding
+    private let audioPlayback: AudioPlaybackProviding
+    private let audioFileDownloader: AudioFileDownloading
     private let formattedZeroDuration: String
     private let formatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
@@ -38,25 +40,34 @@ class AudioPlayer: NSObject, ObservableObject {
     }()
     private let chatLocalization: ChatLocalization
     
-    private var avPlayer: AVPlayer
     private var timer: Timer?
     private var fileName: String
 
     private(set) var url: URL
     
     var progress: Double {
-        avPlayer.playProgress
+        audioPlayback.playProgress
     }
     
     // MARK: - Lifecycle
     
-    init(url: URL, fileName: String, alertType: Binding<ChatAlertType?>, chatLocalization: ChatLocalization) {
+    init(
+        url: URL,
+        fileName: String,
+        alertType: Binding<ChatAlertType?>,
+        chatLocalization: ChatLocalization,
+        audioSession: AudioSessionProviding = AVAudioSession.sharedInstance(),
+        audioPlayback: AudioPlaybackProviding = DefaultAudioPlaybackProvider(),
+        audioFileDownloader: AudioFileDownloading = DefaultAudioFileDownloader()
+    ) {
         self.url = url
         self.fileName = fileName
         self._alertType = alertType
         self.chatLocalization = chatLocalization
-        
-        self.avPlayer = AVPlayer()
+        self.audioSession = audioSession
+        self.audioPlayback = audioPlayback
+        self.audioFileDownloader = audioFileDownloader
+
         self.formattedZeroDuration = formatter.string(from: 0) ?? ""
         self.formattedDuration = formattedZeroDuration
         self.formattedProgress = formattedZeroDuration
@@ -68,39 +79,24 @@ class AudioPlayer: NSObject, ObservableObject {
     
     // MARK: - Methods
 
-    func prepare() {
+    @MainActor
+    func prepare() async {
         LogManager.trace("Preparing audio player")
-        
-        Task { [weak self] in
-            guard let self else {
-                return
-            }
-            
-            do {
-                let fileUrl = try await self.downloadAndSaveAudioFile(url)
-                
-                avPlayer.replaceCurrentItem(with: AVPlayerItem(url: fileUrl))
-                try audioSession.setCategory(.playback, mode: .default)
-                try audioSession.setActive(true)
 
-                _ = await MainActor.run {
-                    self.formattedProgress = self.safeFormatTimeInterval(0)
-                    
-                    let total = TimeInterval(self.avPlayer.totalDuration)
-                    self.formattedDuration = self.safeFormatTimeInterval(total)
-                }
-            } catch {
-                error.logError()
-                
-                _ = await MainActor.run { [weak self] in
-                    guard let self else {
-                        return
-                    }
-                    
-                    self.reset()
-                    self.alertType = .genericError(localization: self.chatLocalization)
-                }
-            }
+        do {
+            let fileUrl = try await audioFileDownloader.downloadAudioFile(from: url, fileName: fileName)
+            audioPlayback.replaceCurrentItem(with: fileUrl)
+            try audioSession.setCategory(.playback, mode: .default, options: [])
+            try audioSession.setActive(true, options: [])
+
+            formattedProgress = safeFormatTimeInterval(0)
+            let total = TimeInterval(audioPlayback.totalDuration)
+            formattedDuration = safeFormatTimeInterval(total)
+        } catch {
+            error.logError()
+
+            reset()
+            alertType = .genericError(localization: chatLocalization)
         }
     }
 
@@ -109,38 +105,36 @@ class AudioPlayer: NSObject, ObservableObject {
         
         isPlaying = true
 
-        if avPlayer.playProgress == 1 {
-            avPlayer.seek(to: .zero)
+        if audioPlayback.playProgress == 1 {
+            audioPlayback.seekToZero()
         }
         
         if timer == nil || timer?.isValid == false {
             timer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(timerAction), userInfo: nil, repeats: true)
         }
         
-        avPlayer.play()
+        audioPlayback.play()
     }
     
     func pause() {
         LogManager.trace("Pausing audio")
         
         timer?.invalidate()
-        avPlayer.pause()
+        audioPlayback.pause()
         isPlaying = false
     }
     
     func seek(_ value: Int) {
         LogManager.trace("Adjusting audio footage of \(value)")
         
-        guard let duration = avPlayer.currentItem?.duration.seconds else {
+        guard let duration = audioPlayback.currentItemDurationSeconds() else {
             LogManager.error("Unable to get duration to be able to seek to a specific time")
             return
         }
-        
-        let targetTime = CMTimeGetSeconds(avPlayer.currentTime()) + Double(value)
-        let newTimeDuration = min(max(0, targetTime), duration)
-        let time = CMTimeMake(value: Int64(newTimeDuration * 1000 as Float64), timescale: 1000)
-        
-        avPlayer.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+
+        let targetTime = audioPlayback.currentTimeSeconds() + Double(value)
+        let clampedTargetTime = max(0.0, min(targetTime, duration))
+        audioPlayback.seek(to: clampedTargetTime, duration: duration)
     }
 }
 
@@ -168,82 +162,18 @@ private extension AudioPlayer {
         
         isPlaying = false
         formattedProgress = formattedZeroDuration
-        avPlayer.pause()
+        audioPlayback.pause()
         timer?.invalidate()
-        try? audioSession.setActive(false)
+        try? audioSession.setActive(false, options: [])
     }
     
     @objc
     func timerAction() {
-        formattedProgress = safeFormatTimeInterval(TimeInterval(avPlayer.currentDuration))
+        formattedProgress = safeFormatTimeInterval(TimeInterval(audioPlayback.currentDuration))
 
-        if avPlayer.playProgress >= 1 {
+        if audioPlayback.playProgress >= 1 {
             isPlaying = false
             timer?.invalidate()
         }
     }
-    
-    func downloadAndSaveAudioFile(_ audioFileUrl: URL) async throws -> URL {
-        guard let cachesDirectoryUrl = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            throw CommonError.failed("Unable to get Caches directory URL")
-        }
-
-        // Sanitize the filename to avoid path issues
-        let sanitizedFilename = sanitizeFilename(fileName)
-        let fileUrl = cachesDirectoryUrl.appendingPathComponent(sanitizedFilename)
-
-        if FileManager().fileExists(atPath: fileUrl.path) {
-            return fileUrl
-        } else {
-            return try await withCheckedThrowingContinuation { continuation in
-                URLSession.shared.downloadTask(with: audioFileUrl) { (location, response, error) in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    }
-                    
-                    guard let response = response as? HTTPURLResponse, (200 ... 299) ~= response.statusCode, let location else {
-                        continuation.resume(throwing: CommonError.failed("Server error"))
-                        return
-                    }
-
-                    do {
-                        // If destination file already exists, remove it first
-                        if FileManager.default.fileExists(atPath: fileUrl.path) {
-                            try FileManager.default.removeItem(at: fileUrl)
-                        }
-                        
-                        // Now move the temp file to the final destination
-                        try FileManager.default.moveItem(at: location, to: fileUrl)
-                        continuation.resume(returning: fileUrl)
-                    } catch {
-                        LogManager.error("Failed to save audio file: \(error.localizedDescription)")
-                        continuation.resume(throwing: error)
-                    }
-                }
-                .resume()
-            }
-        }
-    }
-    
-    func sanitizeFilename(_ filename: String) -> String {
-        // Replace slashes and other problematic characters with underscores
-        let illegalCharacters = CharacterSet(charactersIn: ":/\\?%*|\"<>")
-        let components = filename.components(separatedBy: illegalCharacters)
-        let safeName = components.joined(separator: "_")
-        
-        // Ensure we don't have path traversal issues
-        let lastPathComponent = (safeName as NSString).lastPathComponent
-        
-        // Limit filename length to avoid filesystem issues and UI display problems
-        // while preserving the file extension and most of the original name
-        if lastPathComponent.count > 100 {
-            let fileExtension = (lastPathComponent as NSString).pathExtension
-            let nameWithoutExtension = (lastPathComponent as NSString).deletingPathExtension
-            let truncatedName = String(nameWithoutExtension.prefix(90))
-            return truncatedName + (fileExtension.isEmpty ? "" : "." + fileExtension)
-        }
-        
-        return lastPathComponent
-    }
 }
-

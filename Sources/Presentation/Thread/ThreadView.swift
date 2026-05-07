@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -34,8 +34,50 @@ struct ThreadView: View, Themed {
     }
     
     // MARK: - Builder
-    
+
     var body: some View {
+        Group {
+            if #available(iOS 16, *) {
+                chatContent
+                    .alert(localization.alertUpdateThreadNameTitle, isPresented: $viewModel.isEditingThreadName) {
+                        AlertTextFieldView(isPresented: $viewModel.isEditingThreadName, initialText: viewModel.threadName) { name in
+                            Task {
+                                await viewModel.setThread(name: name)
+                            }
+                        }
+                    }
+            } else {
+                chatContent
+                    .textInputAlert(
+                        TextInputAlertConfiguration(
+                            title: localization.alertUpdateThreadNameTitle,
+                            placeholder: localization.alertUpdateThreadNamePlaceholder,
+                            confirmTitle: localization.commonConfirm,
+                            cancelTitle: localization.commonCancel,
+                            initialText: viewModel.threadName
+                        ),
+                        isPresented: $viewModel.isEditingThreadName
+                    ) { name in
+                        Task {
+                            await viewModel.setThread(name: name)
+                        }
+                    }
+            }
+        }
+        .onChange(of: viewModel.isUserTyping) { _ in
+            viewModel.onUserTyping()
+        }
+        .onChange(of: scheme) { _ in
+            NotificationCenter.default.post(name: .colorSchemeChanged, object: nil)
+        }
+    }
+}
+
+// MARK: - Subviews
+
+private extension ThreadView {
+
+    var chatContent: some View {
         ChatView(
             messageGroups: $viewModel.messageGroups,
             hasMoreMessagesToLoad: $viewModel.hasMoreMessagesToLoad,
@@ -44,6 +86,7 @@ struct ThreadView: View, Themed {
             isInputEnabled: $viewModel.isInputEnabled,
             isThreadClosed: $viewModel.isThreadClosed,
             alertType: $viewModel.alertType,
+            isSendingMessage: $viewModel.isSendingMessage,
             attachmentRestrictions: viewModel.attachmentRestrictions,
             queuePosition: viewModel.positionInQueue,
             onNewMessage: { messageType, attachments in
@@ -60,27 +103,6 @@ struct ThreadView: View, Themed {
             ToolbarItem(placement: .topBarTrailing) {
                 viewModel.menu.build(colors: colors)
             }
-        }
-        .alert(localization.alertUpdateThreadNameTitle, isPresented: $viewModel.isEditingThreadName) {
-            TextField(localization.alertUpdateThreadNamePlaceholder, text: $viewModel.threadName)
-            
-            VStack {
-                Button(localization.commonCancel, role: .cancel) {
-                    viewModel.isEditingThreadName = false
-                }
-                
-                Button(localization.commonConfirm) {
-                    Task {
-                        await viewModel.setThread(name: viewModel.threadName)
-                    }
-                }
-            }
-        }
-        .onChange(of: viewModel.isUserTyping) { _ in
-            viewModel.onUserTyping()
-        }
-        .onChange(of: scheme) { _ in
-            NotificationCenter.default.post(name: .colorSchemeChanged, object: nil)
         }
     }
 }

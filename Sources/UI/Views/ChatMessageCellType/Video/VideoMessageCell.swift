@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -61,26 +61,32 @@ struct VideoMessageCell: View, Themed {
     
     var body: some View {
         ZStack(alignment: message.isUserAgent ? .bottomLeading : .bottomTrailing) {
-            if viewModel.isLoading {
-                AttachmentLoadingView(
-                    title: localization.loadingVideo,
-                    width: displayMode.size.width,
-                    height: displayMode.size.height
-                )
-            } else {
+            switch viewModel.loadingState {
+            case .loaded(let url):
                 Button {
                     isVideoSheetVisible = true
                 } label: {
-                    VideoThumbnailView(
-                        url: viewModel.cachedVideoURL,
-                        displayMode: displayMode
-                    )
+                    VideoThumbnailView(url: url, displayMode: displayMode)
                 }
                 .sheet(isPresented: $isVideoSheetVisible) {
-                    if let videoURL = viewModel.cachedVideoURL {
-                        VideoPlayer(player: AVPlayer(url: videoURL))
-                    }
+                    VideoPlayer(player: AVPlayer(url: url))
                 }
+            case .failed:
+                Button {
+                    Task { @MainActor in
+                        await viewModel.cacheVideoFromURL()
+                    }
+                } label: {
+                    AttachmentFailedView(
+                        width: displayMode.size.width,
+                        height: displayMode.size.height
+                    )
+                }
+            default:
+                AttachmentLoadingView(
+                    width: displayMode.size.width,
+                    height: displayMode.size.height
+                )
             }
         }
         .ifNotNil(position) { view, position in

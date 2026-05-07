@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -28,6 +28,8 @@ public enum RichMessageSubElementType: Hashable, Equatable {
     /// Represents a button element within the rich message.
     case button(RichMessageButton)
     
+    case timeSlot(RichMessageTimeSlot)
+    
     /// Represents a text element, which can be either regular text or a title, in the rich message.
     case text(String, isTitle: Bool)
     
@@ -36,12 +38,15 @@ public enum RichMessageSubElementType: Hashable, Equatable {
     
     // MARK: - Properties
     
-    /// An optional property that extracts the postback value from a button sub-element, returning `nil` for other types.
+    /// An optional property that extracts the postback value from a sub-element type, returning `nil` for other types.
     public var postback: String? {
-        guard case .button(let entity) = self else {
+        switch self {
+        case .button(let entity):
+            return entity.postback
+        case .timeSlot(let entity):
+            return entity.id
+        default:
             return nil
         }
-        
-        return entity.postback
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -36,8 +36,6 @@ struct ImageMessageCell: View, Themed {
     
     @StateObject private var viewModel: ImageMessageCellViewModel
 
-    @Binding var alertType: ChatAlertType?
-
     @State private var isImagePresented = false
     
     private let message: ChatMessage
@@ -56,13 +54,8 @@ struct ImageMessageCell: View, Themed {
     ) {
         self.message = message
         self.position = position
-        self._alertType = alertType
-        
-        _viewModel = StateObject(wrappedValue: ImageMessageCellViewModel(
-            item: item,
-            alertType: alertType,
-            localization: localization
-        ))
+
+        _viewModel = StateObject(wrappedValue: ImageMessageCellViewModel(item: item, alertType: alertType, localization: localization))
     }
     
     // MARK: - Builder
@@ -86,8 +79,9 @@ private extension ImageMessageCell {
 
     @ViewBuilder
     var content: some View {
-        if let image = viewModel.image.map(Image.init) {
-            image
+        switch viewModel.loadingState {
+        case .loaded(let image):
+            Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(
@@ -102,9 +96,19 @@ private extension ImageMessageCell {
                 .sheet(isPresented: $isImagePresented) {
                     ImageViewer(image: image, viewerShown: $isImagePresented)
                 }
-        } else {
+        case .failed:
+            Button {
+                Task { @MainActor in
+                    await viewModel.loadImageFromURL()
+                }
+            } label: {
+                AttachmentFailedView(
+                    width: StyleGuide.Sizing.Attachment.regularDimension,
+                    height: StyleGuide.Sizing.Attachment.regularDimension
+                )
+            }
+        default:
             AttachmentLoadingView(
-                title: localization.commonLoading,
                 width: StyleGuide.Sizing.Attachment.regularDimension,
                 height: StyleGuide.Sizing.Attachment.regularDimension
             )
@@ -115,6 +119,8 @@ private extension ImageMessageCell {
 // MARK: - Preview
 
 #Preview("Single") {
+    let localization = ChatLocalization()
+
     ScrollView {
         VStack {
             ImageMessageCell(
@@ -122,7 +128,7 @@ private extension ImageMessageCell {
                 item: MockData.imageItem,
                 position: .single,
                 alertType: .constant(nil),
-                localization: ChatLocalization()
+                localization: localization
             )
             
             ImageMessageCell(
@@ -130,7 +136,7 @@ private extension ImageMessageCell {
                 item: MockData.imageItem,
                 position: .single,
                 alertType: .constant(nil),
-                localization: ChatLocalization()
+                localization: localization
             )
             
             VStack(spacing: 4) {
@@ -139,7 +145,7 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .first,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
                 
                 ImageMessageCell(
@@ -147,7 +153,7 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .inside,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
                 
                 ImageMessageCell(
@@ -155,7 +161,7 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .last,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
             }
             
@@ -165,7 +171,7 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .first,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
                 
                 ImageMessageCell(
@@ -173,7 +179,7 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .inside,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
                 
                 ImageMessageCell(
@@ -181,14 +187,14 @@ private extension ImageMessageCell {
                     item: MockData.imageItem,
                     position: .last,
                     alertType: .constant(nil),
-                    localization: ChatLocalization()
+                    localization: localization
                 )
             }
         }
     }
     .padding(.horizontal, 10)
     .environmentObject(ChatStyle())
-    .environmentObject(ChatLocalization())
+    .environmentObject(localization)
 }
 
 @available(iOS 17, *)

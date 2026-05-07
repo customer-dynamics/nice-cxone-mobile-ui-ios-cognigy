@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -20,6 +20,13 @@ import UniformTypeIdentifiers
 
 struct MessageInputView: View, Themed {
     
+    // MARK: - Types
+
+    private enum PickerSheet: Identifiable {
+        case document, media, camera
+        var id: Self { self }
+    }
+    
     // MARK: - Constants
     
     private enum Constants {
@@ -28,6 +35,7 @@ struct MessageInputView: View, Themed {
             static let textFieldLineLimit: Int = 6
             static let textFieldAudioStateLineLimit: Int = 1
             static let inputBarCornerRadius: CGFloat = StyleGuide.Sizing.buttonRegularDimension / 2
+            static let sendingProgressScaleEffect: CGFloat = 1.5
         }
         
         enum Spacing {
@@ -57,15 +65,14 @@ struct MessageInputView: View, Themed {
     @Binding private var isEditing: Bool
     @Binding private var isInputEnabled: Bool
     @Binding private var alertType: ChatAlertType?
-    
+    @Binding private var isSendingMessage: Bool
+
     @State private var message = ""
     @State private var attachmentsLoadingProgress: Progress?
     @State private var attachments = [AttachmentItem]()
     @State private var contentSizeThatFits: CGSize = .zero
     @State private var showAttachmentsSheet = false
-    @State private var showDocumentPickerSheet = false
-    @State private var showMediaPickerSheet = false
-    @State private var showMediaCaptureSheet = false
+    @State private var activePickerSheet: PickerSheet?
     
     private let localization: ChatLocalization
     private let attachmentRestrictions: AttachmentRestrictions
@@ -82,7 +89,7 @@ struct MessageInputView: View, Themed {
         }
     }
 
-    private var onSend: ((ChatMessageType, [AttachmentItem]) -> Void)?
+    private let onSend: (ChatMessageType, [AttachmentItem]) -> Void
     private var attributedMessage: Binding<NSAttributedString> {
         Binding<NSAttributedString>(
             get: {
@@ -94,10 +101,8 @@ struct MessageInputView: View, Themed {
                     ]
                 )
             },
-            set: { message in
-                Task {
-                    self.message = message.string
-                }
+            set: {
+                self.message = $0.string
             }
         )
     }
@@ -115,6 +120,7 @@ struct MessageInputView: View, Themed {
         attachmentRestrictions: AttachmentRestrictions,
         isEditing: Binding<Bool>,
         isInputEnabled: Binding<Bool>,
+        isSendingMessage: Binding<Bool>,
         alertType: Binding<ChatAlertType?>,
         localization: ChatLocalization,
         onSend: @escaping (ChatMessageType, [AttachmentItem]) -> Void
@@ -123,8 +129,8 @@ struct MessageInputView: View, Themed {
         self._isEditing = isEditing
         self._isInputEnabled = isInputEnabled
         self._alertType = alertType
+        self._isSendingMessage = isSendingMessage
         self.localization = localization
-        self._contentSizeThatFits = State(initialValue: .zero)
         self.onSend = onSend
         self.audioRecorder = AudioRecorder(alertType: alertType, localization: localization)
     }
@@ -153,6 +159,41 @@ struct MessageInputView: View, Themed {
             .padding(.vertical, Constants.Padding.inputBarVertical)
         }
         .animation(.spring(duration: 0.5), value: audioRecorder.state)
+        .animation(.default, value: isSendButtonDisabled)
+        .animation(.default, value: isSendingMessage)
+        .sheet(item: $activePickerSheet) { sheet in
+            switch sheet {
+            case .media:
+                MediaPickerView(
+                    attachmentsLoadingProgress: $attachmentsLoadingProgress,
+                    attachments: $attachments,
+                    attachmentRestrictions: attachmentRestrictions,
+                    localization: localization
+                ) { alert in
+                    alertType = alert
+                }
+                .edgesIgnoringSafeArea(.all)
+            case .camera:
+                MediaCaptureView(
+                    attachmentRestrictions: attachmentRestrictions,
+                    localization: localization,
+                    onSelected: { attachment in
+                        Task { @MainActor in
+                            await processSelectedAttachments([attachment])
+                        }
+                    },
+                    onAlert: { self.alertType = $0 }
+                )
+                .edgesIgnoringSafeArea(.all)
+            case .document:
+                DocumentPickerView(attachmentRestrictions: attachmentRestrictions) { attachments in
+                    Task { @MainActor in
+                        await processSelectedAttachments(attachments)
+                    }
+                }
+                .edgesIgnoringSafeArea(.all)
+            }
+        }
     }
 }
 
@@ -172,12 +213,12 @@ private extension MessageInputView {
         .frame(width: StyleGuide.Sizing.buttonRegularDimension, height: StyleGuide.Sizing.buttonRegularDimension)
         .confirmationDialog(localization.chatMessageInputAttachmentsOptionTitle, isPresented: $showAttachmentsSheet) {
             Button(localization.chatMessageInputAttachmentsOptionFiles) {
-                showDocumentPickerSheet = true
+                activePickerSheet = .document
             }
-            
+
             if isAnyMimeTypeAllowed([UTType.imagePreffix, UTType.videoPreffix]) {
                 Button(localization.chatMessageInputAttachmentsOptionPhotos) {
-                    showMediaPickerSheet = true
+                    activePickerSheet = .media
                 }
             }
             // `.camera` does not allow to have only `video` MIME type, it requires also image
@@ -186,57 +227,9 @@ private extension MessageInputView {
                     checkCameraPermissionAndShowPicker()
                 }
             }
-            
-            Button(localization.commonCancel, role: .cancel) {
-                showDocumentPickerSheet = false
-            }
+
+            Button(localization.commonCancel, role: .cancel) { }
         }
-        .sheet(isPresented: $showMediaPickerSheet) {
-            MediaPickerView(
-                attachmentsLoadingProgress: $attachmentsLoadingProgress,
-                attachments: $attachments,
-                attachmentRestrictions: attachmentRestrictions,
-                localization: localization
-            ) { alert in
-                alertType = alert
-            }
-            .edgesIgnoringSafeArea(.all)
-        }
-        .sheet(isPresented: $showMediaCaptureSheet) {
-            MediaCaptureView(
-                attachmentRestrictions: attachmentRestrictions,
-                localization: localization,
-                onSelected: { attachment in
-                    Task { @MainActor in
-                        await processSelectedAttachments([attachment])
-                    }
-                },
-                onAlert: { alertType in
-                    self.alertType = alertType
-                }
-            )
-            .edgesIgnoringSafeArea(.all)
-        }
-        .sheet(isPresented: $showDocumentPickerSheet) {
-            DocumentPickerView(attachmentRestrictions: attachmentRestrictions) { attachments in
-                Task { @MainActor in
-                    await processSelectedAttachments(attachments)
-                }
-            }
-            .edgesIgnoringSafeArea(.all)
-        }
-    }
-    
-    var recordVoiceMessageButton: some View {
-        Button {
-            withAnimation {
-                audioRecorder.record()
-            }
-        } label: {
-            Asset.Attachment.recordVoice
-        }
-        .font(.largeTitle)
-        .foregroundStyle(colors.brand.onPrimary, colors.brand.primary)
     }
     
     var inputBar: some View {
@@ -252,7 +245,9 @@ private extension MessageInputView {
                 }
             }
             
-            if isVoiceRecordVisible, audioRecorder.state == .idle {
+            if isSendingMessage {
+                sendingProgressView
+            } else if isVoiceRecordVisible, audioRecorder.state == .idle {
                 recordVoiceMessageButton
             } else {
                 sendButton
@@ -271,39 +266,63 @@ private extension MessageInputView {
             Asset.Attachment.voiceIndicator
                 .foregroundColor(colors.brand.primary)
                 .padding(.leading, Constants.Padding.voiceIndicatorLeading)
-            
-            if case .recording = audioRecorder.state {
-                AnimatedDotsView(text: localization.chatMessageInputAudioRecorderRecording)
-                    .padding(.leading, Constants.Padding.animatedDotsHorizontal)
-                    .padding(.vertical, Constants.Padding.animatedDotsVertical)
-            } else if case .playing = audioRecorder.state {
-                AnimatedDotsView(text: localization.chatMessageInputAudioRecorderPlaying)
-                    .padding(.leading, Constants.Padding.animatedDotsHorizontal)
-                    .padding(.vertical, Constants.Padding.animatedDotsVertical)
-            } else if [.recorded, .paused].contains(audioRecorder.state) {
-                Text(localization.chatMessageInputAudioRecorderRecorded)
-                    .truncationMode(.tail)
-                    .foregroundColor(colors.content.primary)
-                    .padding(.leading, Constants.Padding.animatedDotsHorizontal)
-                    .padding(.vertical, Constants.Padding.animatedDotsVertical)
-            }
-            
+
+            audioStateContent
+                .padding(.leading, Constants.Padding.animatedDotsHorizontal)
+                .padding(.vertical, Constants.Padding.animatedDotsVertical)
+
             Spacer()
-            
+
             Text(audioRecorder.state == .recorded ? audioRecorder.formattedLength : audioRecorder.formattedCurrentTime)
                 .font(.footnote)
                 .foregroundColor(colors.content.tertiary)
                 .padding(.trailing, Constants.Padding.timeLapsedTextTrailing)
         }
     }
+
+    @ViewBuilder
+    var audioStateContent: some View {
+        switch audioRecorder.state {
+        case .recording:
+            AnimatedDotsView(text: localization.chatMessageInputAudioRecorderRecording)
+        case .playing:
+            AnimatedDotsView(text: localization.chatMessageInputAudioRecorderPlaying)
+        case .recorded, .paused:
+            Text(localization.chatMessageInputAudioRecorderRecorded)
+                .truncationMode(.tail)
+                .foregroundColor(colors.content.primary)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    var sendingProgressView: some View {
+        ProgressView()
+            .progressViewStyle(CircularProgressViewStyle(tint: colors.brand.primary))
+            .scaleEffect(Constants.Sizing.sendingProgressScaleEffect)
+            .frame(width: StyleGuide.Sizing.buttonRegularDimension, height: StyleGuide.Sizing.buttonRegularDimension)
+    }
+    
+    var recordVoiceMessageButton: some View {
+        Button {
+            withAnimation {
+                audioRecorder.record()
+            }
+        } label: {
+            Asset.Attachment.recordVoice
+        }
+        .font(.largeTitle)
+        .foregroundStyle(colors.brand.onPrimary, colors.brand.primary)
+        .frame(width: StyleGuide.Sizing.buttonRegularDimension, height: StyleGuide.Sizing.buttonRegularDimension)
+    }
     
     var sendButton: some View {
         Button {
             if audioRecorder.state != .idle, let attachment = audioRecorder.attachmentItem {
-                onSend?(.text(""), [attachment])
+                onSend(.text(""), [attachment])
                 audioRecorder.state = .idle
             } else {
-                onSend?(.text(message), attachments)
+                onSend(.text(message), attachments)
                 message.removeAll()
                 attachments.removeAll()
             }
@@ -313,9 +332,9 @@ private extension MessageInputView {
             Asset.Message.send
         }
         .font(.largeTitle)
-        .disabled(isSendButtonDisabled)
-        .foregroundStyle(isSendButtonDisabled ? colors.content.tertiary : colors.brand.primary)
-        .animation(.default, value: isSendButtonDisabled)
+        .frame(width: StyleGuide.Sizing.buttonRegularDimension, height: StyleGuide.Sizing.buttonRegularDimension)
+        .disabled(isSendButtonDisabled || isSendingMessage)
+        .foregroundStyle(isSendButtonDisabled || isSendingMessage ? colors.content.tertiary : colors.brand.primary)
     }
     
     var deleteVoiceMessageButton: some View {
@@ -347,7 +366,7 @@ private extension MessageInputView {
                 Asset.Attachment.stop
             case .recorded, .paused:
                 Asset.Attachment.play
-            default:
+            case .playing, .idle:
                 Asset.Attachment.pause
             }
         }
@@ -372,32 +391,23 @@ private extension MessageInputView {
     }
 
     func isAnyMimeTypeAllowed(_ mimeTypes: [String]) -> Bool {
-        let allowedMimeTypes = attachmentRestrictions.allowedTypes
-        
-        for mimeType in mimeTypes where allowedMimeTypes.contains(where: { $0.contains(mimeType) }) {
-            return true
+        mimeTypes.contains { mimeType in
+            attachmentRestrictions.allowedTypes.contains { $0.contains(mimeType) }
         }
-        
-        return false
     }
     
     func checkCameraPermissionAndShowPicker() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        
+
         switch status {
         case .authorized:
-            // Permission already granted, show the camera
-            showMediaCaptureSheet = true
+            activePickerSheet = .camera
         case .notDetermined:
-            // Permission not determined yet, request it
-            // This will show the system permission dialog
             AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     if granted {
-                        // User granted permission, show camera
-                        showMediaCaptureSheet = true
+                        self.activePickerSheet = .camera
                     } else {
-                        // User denied permission in the system dialog
                         self.alertType = .cameraPermissionDenied(localization: self.localization) {
                             if let url = URL(string: UIApplication.openSettingsURLString) {
                                 UIApplication.shared.open(url)
@@ -407,7 +417,7 @@ private extension MessageInputView {
                 }
             }
         default:
-            // Permission previously denied or unhandled state -> show settings alert
+            // Permission previously denied or restricted — direct user to Settings
             alertType = .cameraPermissionDenied(localization: localization) {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
@@ -422,6 +432,8 @@ private extension MessageInputView {
 @available(iOS 17.0, *)
 #Preview {
     @Previewable @State var isEditing = false
+    @Previewable @State var isInputEnabled = true
+    @Previewable @State var isSendingMessage = true
     @Previewable @State var alertType: ChatAlertType?
     
     let localization = ChatLocalization()
@@ -432,7 +444,8 @@ private extension MessageInputView {
         MessageInputView(
             attachmentRestrictions: MockData.attachmentRestrictions,
             isEditing: $isEditing,
-            isInputEnabled: .constant(true),
+            isInputEnabled: $isInputEnabled,
+            isSendingMessage: $isSendingMessage,
             alertType: $alertType,
             localization: localization
         ) { _, _ in }

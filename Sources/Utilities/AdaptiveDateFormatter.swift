@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -28,17 +28,22 @@ import Foundation
 /// The instance uses `Calendar.current` and `Locale.autoupdatingCurrent` so results
 /// automatically follow the user's region and locale changes at runtime.
 final class AdaptiveDateFormatter {
-    
+
     // MARK: - Properties
-    
+
     private let calendar: Calendar
     private let dateFormatter = DateFormatter()
+    private let dateProvider: () -> Date
 
     // MARK: - Init
-    
-    init() {
+
+    /// Creates an adaptive date formatter.
+    /// - Parameter dateProvider: A closure that returns the current date. Defaults to `Date.now`.
+    ///                           Can be overridden for testing purposes.
+    init(dateProvider: @escaping () -> Date = { Date.now }) {
         self.calendar = .current
         self.dateFormatter.locale = .autoupdatingCurrent
+        self.dateProvider = dateProvider
     }
 
     // MARK: - Methods
@@ -56,15 +61,20 @@ final class AdaptiveDateFormatter {
     ///   - If the date is **older than a week but within the same year**, returns a localized day and month (e.g., "24 Feb").
     ///   - If the date is **from a different year**, returns a localized day, month, and year (e.g., "24 Feb 2024").
     func string(from date: Date) -> String {
-        let now = Date.now
-        
-        if calendar.isDateInToday(date) {
+        let now = dateProvider()
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfDate = calendar.startOfDay(for: date)
+        let dayDifference = calendar.dateComponents([.day], from: startOfDate, to: startOfToday).day ?? 0
+
+        dateFormatter.doesRelativeDateFormatting = false
+
+        if dayDifference == 0 {
             // Same day → show time only - e.g., "15:54"
             dateFormatter.dateStyle = .none
             dateFormatter.timeStyle = .short
             
             return dateFormatter.string(from: date)
-        } else if calendar.isDateInYesterday(date) {
+        } else if dayDifference == 1 {
             // Yesterday → show "Yesterday" instead of weekday name - "Yesterday"
             dateFormatter.doesRelativeDateFormatting = true
             dateFormatter.dateStyle = .short

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -21,25 +21,25 @@ class ImageMessageCellViewModel: ObservableObject {
     
     // MARK: - Properties
     
-    @Published var image: KFCrossPlatformImage?
-    
+    @Published var loadingState: AttachmentLoadingState<KFCrossPlatformImage> = .initial
+
     @Binding var alertType: ChatAlertType?
-    
+
     let item: AttachmentItem
     let localization: ChatLocalization
-    
+
     private lazy var kingfisherManager = KingfisherManager(
         downloader: ImageDownloader(name: ChatView.packageIdentifier),
         cache: ImageCache(name: ChatView.packageIdentifier)
     )
     
     // MARK: - Init
-    
+
     init(item: AttachmentItem, alertType: Binding<ChatAlertType?>, localization: ChatLocalization) {
         self.item = item
         self._alertType = alertType
         self.localization = localization
-        
+
         Task { [weak self] in
             await self?.loadImageFromURL()
         }
@@ -48,8 +48,19 @@ class ImageMessageCellViewModel: ObservableObject {
     // MARK: - Functions
     
     func loadImageFromURL() async {
+        if let localImage = loadCachedImage() {
+            await MainActor.run { [weak self] in
+                self?.loadingState = .loaded(localImage)
+            }
+            return
+        }
+
         let cacheKey = item.url.absoluteString
-        
+
+        await MainActor.run {
+            loadingState = .loading
+        }
+
         if !kingfisherManager.cache.isCached(forKey: cacheKey) {
             await downloadImage(cacheKey: cacheKey)
         } else {
@@ -62,6 +73,22 @@ class ImageMessageCellViewModel: ObservableObject {
 
 private extension ImageMessageCellViewModel {
     
+    func loadCachedImage() -> KFCrossPlatformImage? {
+        guard let cacheDirectoryURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+
+        let fileURL = cacheDirectoryURL.appendingPathComponent(item.fileName)
+
+        guard FileManager.default.fileExists(atPath: fileURL.path),
+              let data = try? Data(contentsOf: fileURL),
+              let image = KFCrossPlatformImage(data: data) else {
+            return nil
+        }
+
+        return image.fixOrientation()
+    }
+
     func downloadImage(cacheKey: String) async {
         LogManager.trace("Downloading image from URL")
         
@@ -70,13 +97,11 @@ private extension ImageMessageCellViewModel {
             let resource = Kingfisher.KF.ImageResource(downloadURL: item.url, cacheKey: cacheKey)
             let result = try await kingfisherManager.retrieveImage(
                 with: resource,
-                options: [
-                    .targetCache(kingfisherManager.cache)
-                ]
+                options: [.targetCache(kingfisherManager.cache)]
             )
             
             await MainActor.run { [weak self] in
-                self?.image = result.image.fixOrientation()
+                self?.loadingState = .loaded(result.image.fixOrientation())
             }
         } catch {
             error.logError()
@@ -87,6 +112,7 @@ private extension ImageMessageCellViewModel {
                 }
                 
                 self.alertType = .genericError(localization: self.localization)
+                self.loadingState = .failed
             }
         }
     }
@@ -101,13 +127,13 @@ private extension ImageMessageCellViewModel {
                 guard let self else {
                     return
                 }
-                
+
                 if let image = result.image {
-                    self.image = image.fixOrientation()
+                    self.loadingState = .loaded(image.fixOrientation())
                 } else {
                     LogManager.error("Image not found in cache")
-                    
                     self.alertType = .genericError(localization: self.localization)
+                    self.loadingState = .failed
                 }
             }
         } catch {
@@ -119,6 +145,7 @@ private extension ImageMessageCellViewModel {
                 }
                 
                 self.alertType = .genericError(localization: self.localization)
+                self.loadingState = .failed
             }
         }
     }

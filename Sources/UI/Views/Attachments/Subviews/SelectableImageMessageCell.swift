@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -67,15 +67,30 @@ struct SelectableImageMessageCell: View, Themed {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if let image = viewModel.image.map(Image.init) {
-                Button {
-                    if inSelectionMode {
-                        attachmentsViewModel.selectAttachment(with: item.id)
-                    } else {
-                        isImagePresented.toggle()
+            Button {
+                if inSelectionMode {
+                    attachmentsViewModel.selectAttachment(with: item.id)
+                } else if case .loaded = viewModel.loadingState {
+                    isImagePresented.toggle()
+                } else if case .failed = viewModel.loadingState {
+                    Task { @MainActor in
+                        await viewModel.loadImageFromURL()
                     }
-                } label: {
-                    image
+                }
+            } label: {
+                switch viewModel.loadingState {
+                case .initial, .loading:
+                    AttachmentLoadingView(
+                        width: StyleGuide.Sizing.Attachment.largeWidth,
+                        height: StyleGuide.Sizing.Attachment.largeHeight
+                    )
+                case .failed:
+                    AttachmentFailedView(
+                        width: StyleGuide.Sizing.Attachment.largeWidth,
+                        height: StyleGuide.Sizing.Attachment.largeHeight
+                    )
+                case .loaded(let image):
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                         .frame(
@@ -84,17 +99,13 @@ struct SelectableImageMessageCell: View, Themed {
                         )
                         .clipped()
                 }
-                .sheet(isPresented: $isImagePresented) {
-                    ImageViewer(image: image, viewerShown: $isImagePresented)
-                }
-            } else {
-                AttachmentLoadingView(
-                    title: localization.commonLoading,
-                    width: StyleGuide.Sizing.Attachment.largeWidth,
-                    height: StyleGuide.Sizing.Attachment.largeHeight
-                )
             }
-            
+            .sheet(isPresented: $isImagePresented) {
+                if case .loaded(let image) = viewModel.loadingState {
+                    ImageViewer(image: Image(uiImage: image), viewerShown: $isImagePresented)
+                }
+            }
+
             if inSelectionMode {
                 SelectableCircle(isSelected: item.isSelected)
                     .padding([.top, .trailing], Constants.Padding.selectableCircleTopTrailing)

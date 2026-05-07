@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -49,11 +49,11 @@ struct MesssageInputAttachmentListDocumentView: View, Themed {
     let item: AttachmentItem
     
     // MARK: - Init
-    
-    init(item: AttachmentItem) {
+
+    init(item: AttachmentItem, alertType: Binding<ChatAlertType?>, localization: ChatLocalization) {
         self.item = item
-        
-        _pdfViewModel = StateObject(wrappedValue: PDFViewModel(attachmentItem: item))
+
+        _pdfViewModel = StateObject(wrappedValue: PDFViewModel(attachmentItem: item, alertType: alertType, localization: localization))
     }
     
     // MARK: - Builder
@@ -66,7 +66,7 @@ struct MesssageInputAttachmentListDocumentView: View, Themed {
         case let .some(fileExtension):
             documentThumbnailView(fileExtension: fileExtension)
         default:
-            AttachmentLoadingView(title: localization.loadingDoc, width: displayMode.size.width, height: displayMode.size.height)
+            AttachmentLoadingView(width: displayMode.size.width, height: displayMode.size.height)
         }
     }
 }
@@ -122,6 +122,7 @@ private extension MesssageInputAttachmentListDocumentView {
 
 @available(iOS 16, *)
 #Preview {
+    let localization = ChatLocalization()
     let mimeTypes: [[AttachmentItem]] = [
         [
             MockData.audioItem,
@@ -139,11 +140,11 @@ private extension MesssageInputAttachmentListDocumentView {
         ForEach(mimeTypes, id: \.self) { section in
             GridRow {
                 ForEach(section, id: \.self) { item in
-                    MesssageInputAttachmentListDocumentView(item: item)
+                    MesssageInputAttachmentListDocumentView(item: item, alertType: .constant(nil), localization: localization)
                 }
             }
         }
     }
     .environmentObject(ChatStyle())
-    .environmentObject(ChatLocalization())
+    .environmentObject(localization)
 }

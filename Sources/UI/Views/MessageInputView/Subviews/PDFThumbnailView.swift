@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -44,31 +44,37 @@ struct PDFThumbnailView: View {
     
     var body: some View {
         Group {
-            if let thumbnail = viewModel.thumbnail {
+            switch viewModel.thumbnailLoadingState {
+            case .loaded(let image):
                 Button {
                     viewModel.preparePDFForViewing()
-                    
+
                     isPresentingPDFViewer = true
                 } label: {
-                    Image(uiImage: thumbnail)
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                 }
                 .frame(width: width, height: height)
                 .clipped()
                 .disabled(inSelectionMode)
-            } else {
-                AttachmentLoadingView(title: localization.loadingDoc, width: width, height: height)
+            case .failed:
+                Button {
+                    viewModel.loadThumbnail()
+                } label: {
+                    AttachmentFailedView(
+                        width: width,
+                        height: height
+                    )
+                }
+                .disabled(inSelectionMode)
+            default:
+                AttachmentLoadingView(width: width, height: height)
             }
         }
         .onAppear(perform: viewModel.loadThumbnail)
         .sheet(isPresented: $isPresentingPDFViewer) {
-            if viewModel.isLoading {
-                AttachmentLoadingView(title: localization.loadingDoc, width: .infinity, height: .infinity)
-                    .edgesIgnoringSafeArea(.all)
-            } else if viewModel.pdfDocument != nil {
-                PDFViewer(viewModel: viewModel)
-            }
+            PDFViewer(viewModel: viewModel)
         }
     }
 }
@@ -77,33 +83,30 @@ struct PDFThumbnailView: View {
 
 #Preview("Small") {
     PDFThumbnailView(
-        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem),
+        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem, alertType: .constant(nil), localization: ChatLocalization()),
         inSelectionMode: .constant(false),
         width: StyleGuide.Sizing.Attachment.smallDimension,
         height: StyleGuide.Sizing.Attachment.smallDimension
     )
     .environmentObject(ChatStyle())
-    .environmentObject(ChatLocalization())
 }
 
 #Preview("Regular") {
     PDFThumbnailView(
-        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem),
+        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem, alertType: .constant(nil), localization: ChatLocalization()),
         inSelectionMode: .constant(false),
         width: StyleGuide.Sizing.Attachment.regularDimension,
         height: StyleGuide.Sizing.Attachment.regularDimension
     )
     .environmentObject(ChatStyle())
-    .environmentObject(ChatLocalization())
 }
 
 #Preview("Large") {
     PDFThumbnailView(
-        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem),
+        viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem, alertType: .constant(nil), localization: ChatLocalization()),
         inSelectionMode: .constant(false),
         width: StyleGuide.Sizing.Attachment.largeWidth,
         height: StyleGuide.Sizing.Attachment.largeHeight
     )
     .environmentObject(ChatStyle())
-    .environmentObject(ChatLocalization())
 }

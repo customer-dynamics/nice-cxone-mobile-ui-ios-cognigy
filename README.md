@@ -16,7 +16,6 @@ The CXoneChatUI module provides a default implementation of a Chat User Interfac
 ## Limitations
 
 - The CXoneChatUI does not support phone landscape orientation
-- Color customization is currently disabled to ensure accessibility standards and optimal user experience. This feature will be available in future releases.
 
 ## Modules
 
@@ -110,7 +109,7 @@ chatCoordinator.content(modally: modally) { [weak self] in
 
 #### UIKit Integration
 
-The chat can be integrated with UIKit using the method `public func start(threadId: String? = nil, in parentViewController: UIViewController, presentModally: Bool, onFinish: (() -> Void)? = nil)`. This method requires a `UINavigationController` to control the navigation flow and presentation style..
+The chat can be integrated with UIKit using the method `public func start(threadId: String? = nil, in parentViewController: UIViewController, presentModally: Bool, onFinish: (() -> Void)? = nil)`. This method requires a `UINavigationController` to control the navigation flow and presentation style.
 
 ```swift
 let chatCoordinator = ChatCoordinator()
@@ -169,9 +168,11 @@ The CXoneChatUI module supports voice recording capabilities, allowing users to 
 
 ## Customization
 
-The UI module supports 
+The UI module supports color customization, localization, and additional chat configuration.
 
-> ⚠️ Warning: Color customization is currently disabled to ensure accessibility standards and optimal user experience. This feature will be available in future releases.
+### Colors
+
+You can customize the color scheme of the chat interface to match your brand. See [CS: Colors](docs/cs-colors.md) for details.
 
 ### Localization
 
@@ -190,8 +191,10 @@ self.chatCoordinator = ChatCoordinator(chatLocalization: localization)
 ### Additional Configuration
 
 The `ChatCoordinator` lets you provide extra information to chat sessions through its `ChatConfiguration` parameter. This gives you two key benefits:
-Personalization: Customer service agents can see relevant details about your users (like account level or history) without asking for it
-System integration: You can connect chat sessions with your other systems by passing reference IDs or metadata
+
+- **Personalization**: Customer service agents can see relevant details about your users (like account level or history) without asking for it.
+- **System integration**: You can connect chat sessions with your other systems by passing reference IDs or metadata.
+
 This feature passes along information your app already has without requiring users to enter it themselves. For information that users need to provide directly, use the pre-chat survey instead (see `cs-custom-fields.md`).
 
 The `ChatConfiguration` struct provides two attributes:

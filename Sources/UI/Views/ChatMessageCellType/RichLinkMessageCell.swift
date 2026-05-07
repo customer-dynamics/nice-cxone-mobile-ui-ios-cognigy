@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -42,26 +42,19 @@ struct RichLinkMessageCell: View, Themed {
     
     @Environment(\.colorScheme) var scheme
 
+    @Environment(\.openURL) private var openURL
+
     @State private var isShareSheetVisible = false
-    
+
     let message: ChatMessage
     let item: RichLinkItem
-    let openLink: (URL) -> Void
-    
-    // MARK: - Init
-    
-    init(message: ChatMessage, item: RichLinkItem, openLink: @escaping (URL) -> Void) {
-        self.message = message
-        self.item = item
-        self.openLink = openLink
-    }
     
     // MARK: - Builder
     
     var body: some View {
         HStack {
             Button {
-                openLink(item.url)
+                openURL(item.url)
             } label: {
                 buttonContent
             }
@@ -141,7 +134,7 @@ private extension RichLinkMessageCell {
 // MARK: - Preview
 
 #Preview {
-    RichLinkMessageCell(message: MockData.richLinkMessage(), item: MockData.richLinkItem) { _ in }
+    RichLinkMessageCell(message: MockData.richLinkMessage(), item: MockData.richLinkItem)
         .environmentObject(ChatStyle())
         .environmentObject(ChatLocalization())
 }

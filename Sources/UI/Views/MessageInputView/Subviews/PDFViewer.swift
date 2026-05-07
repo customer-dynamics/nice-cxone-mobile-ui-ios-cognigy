@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -43,10 +43,16 @@ struct PDFViewer: View, Themed {
     // MARK: - Builder
 
     var body: some View {
-        if let pdfDocument = viewModel.pdfDocument {
-            PDFKitView(document: pdfDocument)
-        } else {
+        switch viewModel.documentLoadingState {
+        case .loaded(let document):
+            PDFKitView(document: document)
+        case .failed:
             errorView
+        default:
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: colors.content.primary))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(colors.background.default)
         }
     }
 }
@@ -96,13 +102,17 @@ private struct PDFKitView: UIViewRepresentable {
 // MARK: - Previews
 
 #Preview("PDF") {
-    PDFViewer(viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem))
-       .environmentObject(ChatLocalization())
+    let localization = ChatLocalization()
+
+    PDFViewer(viewModel: PDFViewModel(attachmentItem: MockData.pdfPreviewItem, alertType: .constant(nil), localization: localization))
+       .environmentObject(localization)
        .environmentObject(ChatStyle())
 }
 
 #Preview("Error") {
-    PDFViewer(viewModel: PDFViewModel(attachmentItem: MockData.docPreviewItem))
-       .environmentObject(ChatLocalization())
+    let localization = ChatLocalization()
+
+    PDFViewer(viewModel: PDFViewModel(attachmentItem: MockData.docPreviewItem, alertType: .constant(nil), localization: localization))
+       .environmentObject(localization)
        .environmentObject(ChatStyle())
 }

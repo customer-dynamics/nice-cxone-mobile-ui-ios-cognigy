@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -24,6 +24,7 @@ class ChatContainerViewModel: ObservableObject, Overlayable {
     @Published var overlay: (() -> AnyView)?
     @Published var sheet: (() -> AnyView)?
     @Published var alertType: ChatAlertType?
+    @Published var safariURL: IdentifiableURL?
     @Published var isRecoveringThread = false
     
     let chatProvider: ChatProvider
@@ -39,12 +40,6 @@ class ChatContainerViewModel: ObservableObject, Overlayable {
     var threadToOpen: String?
     var disconnecting = false
     var processingDeeplink = false
-    
-    lazy var isSheetDisplayed = Binding { [weak self] in
-        self?.sheet != nil
-    } set: { [weak self] _ in
-        self?.sheet = nil
-    }
 
     weak var delegate: ChatDelegate?
     
@@ -205,8 +200,6 @@ extension ChatContainerViewModel {
 
         disconnecting = false
 
-        await showLoading(message: chatLocalization.commonConnecting)
-
         do {
             try await chatProvider.connection.connect()
         } catch CXoneChatError.transactionTokenExpired {
@@ -341,16 +334,6 @@ extension ChatContainerViewModel {
 // MARK: - Sheets
 
 extension ChatContainerViewModel {
-
-    func hideSheet(file: StaticString = #file, line: UInt = #line) async {
-        LogManager.trace("Hiding sheet", file: file, line: line)
-
-        await MainActor.run { [weak self] in
-            self?.sheet = nil
-        }
-        
-        await Task.sleep(seconds: 0.5)
-    }
     
     @MainActor
     func showPrechatSurveyForm(title: String, fields: [FormCustomFieldType]) async -> [String: String]? {
@@ -370,11 +353,9 @@ extension ChatContainerViewModel {
             }
 
             Task { @MainActor [weak self] in
-                self?.sheet = {
-                    AnyView(PrechatSurveyFormView(viewModel: formViewModel, title: title))
+                await self?.showSheet {
+                    PrechatSurveyFormView(viewModel: formViewModel, title: title)
                 }
-                
-                await Task.sleep(seconds: 0.5)
             }
         }
     }
@@ -382,7 +363,13 @@ extension ChatContainerViewModel {
     @MainActor
     func showSendTranscriptForm(for thread: ChatThread) async -> Bool? {
         await withCheckedContinuation { continuation in
-            let sendTranscriptViewModel = SendTranscriptFormViewModel(chatThread: thread, chatLocalization: chatLocalization) { result in
+            let binding = Binding<(() -> AnyView)?> { [weak self] in
+                self?.overlay ?? nil
+            } set: { [weak self] newValue in
+                self?.overlay = newValue
+            }
+
+            let sendTranscriptViewModel = SendTranscriptFormViewModel(chatThread: thread, overlay: binding, chatLocalization: chatLocalization) { result in
                 Task { @MainActor [weak self] in
                     await self?.hideSheet()
                     
@@ -399,11 +386,9 @@ extension ChatContainerViewModel {
             }
             
             Task { @MainActor [weak self] in
-                self?.sheet = {
-                    AnyView(SendTranscriptFormView(viewModel: sendTranscriptViewModel))
+                await self?.showSheet {
+                    SendTranscriptFormView(viewModel: sendTranscriptViewModel)
                 }
-                
-                await Task.sleep(seconds: 0.5)
             }
         }
     }
@@ -417,7 +402,7 @@ extension ChatContainerViewModel {
     func showLoading(message: String, action: (() async -> Void)? = nil, file: StaticString = #file, line: UInt = #line) async {
         LogManager.trace("Showing loading overlay with status message: \(message)", file: file, line: line)
 
-        await showOverlay(file: file, line: line) {
+        await showOverlay({
             ChatLoadingOverlay(text: message) {
                 Task { @MainActor [weak self] in
                     if let action {
@@ -427,27 +412,27 @@ extension ChatContainerViewModel {
                     }
                 }
             }
-        }
+        }, file: file, line: line)
     }
 
     @MainActor
     func showOffline(file: StaticString = #file, line: UInt = #line) async {
         LogManager.trace("Showing offline view overlay", file: file, line: line)
         
-        await showOverlay(file: file, line: line) {
+        await showOverlay({
             OfflineView {
                 Task { @MainActor [weak self] in
                     await self?.disconnect()
                 }
             }
-        }
+        }, file: file, line: line)
     }
 
     @MainActor
     func showInactivityPopup(popup: InactivityPopup, file: StaticString = #file, line: UInt = #line) async {
         LogManager.trace("Showing inactivity popup overlay with countdown: \(popup.numberOfSeconds) seconds", file: file, line: line)
         
-        await showOverlay(file: file, line: line) {
+        await showOverlay({
             InactivityPopupView(
                 title: popup.title,
                 message: popup.message,
@@ -464,9 +449,15 @@ extension ChatContainerViewModel {
                     Task { @MainActor in
                         await self?.handleInactivityPopupResponse(refreshSession: false, popup: popup)
                     }
+                },
+                onTimeout: { [weak self] in
+                    Task { @MainActor in
+                        await self?.hideOverlay()
+                        self?.cachedThreadViewModel?.isShowingInactivityPopup = false
+                    }
                 }
             )
-        }
+        }, file: file, line: line)
     }
 }
 
@@ -617,13 +608,8 @@ private extension ChatContainerViewModel {
         
         switch chatState {
         case .connecting:
-            await self.showLoading(message: self.chatLocalization.commonConnecting)
-        case .connected:
-            // Hide `connecting` overlay and replace it with a `loading` one
-            await self.hideOverlay()
-            // Show loading overlay
             await self.showLoading(message: self.chatLocalization.commonLoading)
-            
+        case .connected:
             do {
                 LogManager.trace("Reporting chat window open event")
                 
@@ -647,7 +633,10 @@ private extension ChatContainerViewModel {
             }
             
             if cachedThreadViewModel == nil {
-                await self.hideOverlay()
+                // The thread view is not ready yet but there is a thread to be opened so don't hide the overlay to share the loading indicator
+                if threadToOpen == nil {
+                    await self.hideOverlay()
+                }
             } else {
                 LogManager.info("Chat is ready, but some thread is active and it needs to be recovered - keep the loading overlay")
                 
@@ -680,16 +669,16 @@ private extension ChatContainerViewModel {
         do {
             if refreshSession {
                 try await chatProvider.proactiveAction.trigger(.refreshSession(popup))
-                
-                await hideOverlay()
             } else {
                 try await chatProvider.proactiveAction.trigger(.expireSession(popup))
             }
+
+            await hideOverlay()
             
             cachedThreadViewModel?.isShowingInactivityPopup = false
         } catch {
             error.logError()
-            
+
             _ = await MainActor.run { [weak self] in
                 guard let self else {
                     return

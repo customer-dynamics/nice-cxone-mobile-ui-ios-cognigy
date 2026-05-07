@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -104,6 +104,7 @@ enum MockData {
     static let listPickerItem = ListPickerItem(title: Lorem.word(), message: Lorem.sentence(), buttons: richMessageOptions())
     static let quickRepliesItem = QuickRepliesItem(title: Lorem.sentence(), message: Lorem.sentence(), options: quickReplyOptions())
     static let richLinkItem = RichLinkItem(title: Lorem.words(), url: imageUrl, imageUrl: imageUrl)
+    static let timePickerItem = TimePickerItem(title: Lorem.words(), sheetTitle: Lorem.words(), timeSlots: timeSlotOptions())
     
     static let customer = ChatUser(id: LowercaseUUID().uuidString, userName: "Peter Parker", avatarURL: nil, isAgent: false)
     static let agent = ChatUser(id: LowercaseUUID().uuidString, userName: "John Doe", avatarURL: imageUrl, isAgent: true)
@@ -288,6 +289,46 @@ enum MockData {
         )
     }
     
+    static func chatMessage(
+        id: String = "test-message-id",
+        user: ChatUser? = nil,
+        types: [ChatMessageType] = [.text("Test")],
+        date: Date = Date(),
+        status: MessageStatus = .seen
+    ) -> ChatMessage {
+        ChatMessage(id: id, user: user, types: types, date: date, status: status)
+    }
+
+    static func messageSequence(
+        from user: ChatUser,
+        count: Int,
+        startDate: Date = Date(),
+        interval: TimeInterval = 30
+    ) -> [ChatMessage] {
+        (0..<count).map { index in
+            chatMessage(
+                id: "msg-\(index)",
+                user: user,
+                date: startDate.addingTimeInterval(Double(index) * interval)
+            )
+        }
+    }
+
+    static func unsupportedMessage(date: Date = Date(), status: MessageStatus = .seen) -> ChatMessage {
+        ChatMessage(
+            id: LowercaseUUID().uuidString,
+            user: agent,
+            types: [.unknown(Self.unsupportedMessageContent)],
+            date: date,
+            status: status
+        )
+    }
+}
+
+// MARK: - Helpers
+
+extension MockData {
+
     static func treeNodeFieldEntityChildren() -> [TreeNodeFieldEntity] {
         [
             TreeNodeFieldEntity(id: LowercaseUUID().uuidString, label: "Mobile Phone", value: "phone", children: [
@@ -330,22 +371,7 @@ enum MockData {
             TreeNodeFieldEntity(id: LowercaseUUID().uuidString, label: "Other", value: "other")
         ]
     }
-    
-    static func unsupportedMessage(date: Date = Date(), status: MessageStatus = .seen) -> ChatMessage {
-        ChatMessage(
-            id: LowercaseUUID().uuidString,
-            user: agent,
-            types: [.unknown(Self.unsupportedMessageContent)],
-            date: date,
-            status: status
-        )
-    }
-}
 
-// MARK: - Helpers
-
-extension MockData {
-    
     static func randomEmoji(count: Int) -> [String] {
         var result = [String]()
         
@@ -379,5 +405,64 @@ extension MockData {
                     iconUrl: Bool.random() ? imageUrl : nil
                 )
             }
+    }
+    
+    static func timeSlotOptions() -> [RichMessageTimeSlot] { // swiftlint:disable:this function_body_length
+        let formatter = ISO8601DateFormatter()
+
+        return [
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 2700,
+                startTime: formatter.date(from: "2030-01-01T15:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 1800,
+                startTime: formatter.date(from: "2030-01-02T09:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 2700,
+                startTime: formatter.date(from: "2030-01-02T09:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 5400,
+                startTime: formatter.date(from: "2030-01-02T09:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 5400,
+                startTime: formatter.date(from: "2030-01-03T15:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 2700,
+                startTime: formatter.date(from: "2030-01-03T15:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 1800,
+                startTime: formatter.date(from: "2030-01-03T16:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 2700,
+                startTime: formatter.date(from: "2030-01-03T16:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 3600,
+                startTime: formatter.date(from: "2030-01-03T16:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            ),
+            RichMessageTimeSlot(
+                id: LowercaseUUID().uuidString,
+                duration: 5400,
+                startTime: formatter.date(from: "2030-01-03T16:00:00+01:00")! // swiftlint:disable:this force_unwrapping
+            )
+        ]
     }
 }

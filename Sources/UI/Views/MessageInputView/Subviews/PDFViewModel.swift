@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2025. NICE Ltd. All rights reserved.
+// Copyright (c) 2021-2026. NICE Ltd. All rights reserved.
 //
 // Licensed under the NICE License;
 // you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 //    https://github.com/nice-devone/nice-cxone-mobile-ui-ios/blob/main/LICENSE
 //
 // TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE CXONE MOBILE SDK IS PROVIDED ON
-// AN “AS IS” BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
+// AN "AS IS" BASIS. NICE HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS
 // OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 //
@@ -20,24 +20,28 @@ class PDFViewModel: ObservableObject {
 
     // MARK: - Properties
 
-    @Published var thumbnail: UIImage?
-    @Published var pdfDocument: PDFDocument?
-    @Published var isLoading = false
+    @Published var thumbnailLoadingState: AttachmentLoadingState<UIImage> = .initial
+    @Published var documentLoadingState: AttachmentLoadingState<PDFDocument> = .initial
+
+    @Binding var alertType: ChatAlertType?
 
     let url: URL
     let loader: AttachmentLoader
-    
+    let localization: ChatLocalization
+
     private let requiresSecurityScope: Bool
     
     private static let thumbnailDimension: CGFloat = 1024
     
     // MARK: - Init
 
-    init(attachmentItem: AttachmentItem) {
+    init(attachmentItem: AttachmentItem, alertType: Binding<ChatAlertType?>, localization: ChatLocalization) {
         self.url = attachmentItem.url
         self.requiresSecurityScope = attachmentItem.requiresSecurityScope
         self.loader = AttachmentLoader(url: attachmentItem.url)
-        
+        self._alertType = alertType
+        self.localization = localization
+
         loadDocumentFromLoaderOrCache(url: url)
         
         loadThumbnail()
@@ -46,16 +50,22 @@ class PDFViewModel: ObservableObject {
     // MARK: - Methods
 
     func loadThumbnail() {
-        guard thumbnail == nil else {
+        guard thumbnailLoadingState.isInitial || thumbnailLoadingState.isFailed else {
             return
         }
-        
+
         let stableIdentifier = extractStableIdentifier(from: url)
         let cacheKey = stableIdentifier + ":thumbnail"
-        
+
         if let cachedData = AttachmentCache.shared.data(for: cacheKey), let cachedImage = UIImage(data: cachedData) {
-            self.thumbnail = cachedImage
+            Task { @MainActor in
+                self.thumbnailLoadingState = .loaded(cachedImage)
+            }
             return
+        }
+
+        Task { @MainActor in
+            thumbnailLoadingState = .loading
         }
         
         Task { [weak self] in
@@ -66,50 +76,62 @@ class PDFViewModel: ObservableObject {
             let thumbnail = await self.createThumbnail(url: self.url)
             
             await MainActor.run {
-                self.thumbnail = thumbnail
-                
-                if let thumbnail, let data = thumbnail.pngData() {
-                    AttachmentCache.shared.set(data, for: cacheKey)
+                if let thumbnail {
+                    if let data = thumbnail.pngData() {
+                        AttachmentCache.shared.set(data, for: cacheKey)
+                    }
+                    
+                    self.thumbnailLoadingState = .loaded(thumbnail)
+                } else {
+                    self.alertType = .genericError(localization: self.localization)
+                    self.thumbnailLoadingState = .failed
                 }
             }
         }
     }
 
     func preparePDFForViewing() {
-        guard pdfDocument == nil else {
+        guard documentLoadingState.isInitial || documentLoadingState.isFailed else {
             return
         }
-        
+
         let stableIdentifier = extractStableIdentifier(from: url)
         let documentCacheKey = stableIdentifier + ":document"
-        
+
         // Check document cache first
         if let cachedData = AttachmentCache.shared.data(for: documentCacheKey), let document = PDFDocument(data: cachedData) {
-            pdfDocument = document
+            Task { @MainActor in
+                documentLoadingState = .loaded(document)
+            }
             return
         }
-        
-        isLoading = true
+
+        Task { @MainActor in
+            documentLoadingState = .loading
+        }
         
         Task { [weak self] in
             guard let self else {
                 return
             }
             
-            if let data = self.loader.data, let document = PDFDocument(data: data) {
+            if case .loaded(let data) = self.loader.loadingState, let document = PDFDocument(data: data) {
                 // Also cache the document data for future use
                 if let dataRep = document.dataRepresentation() {
                     AttachmentCache.shared.set(dataRep, for: documentCacheKey)
                 }
                 
                 await MainActor.run {
-                    self.pdfDocument = document
-                    self.isLoading = false
+                    self.documentLoadingState = .loaded(document)
                 }
             } else if let document = await self.loadPDF(from: self.url) {
                 await MainActor.run {
-                    self.pdfDocument = document
-                    self.isLoading = false
+                    self.documentLoadingState = .loaded(document)
+                }
+            } else {
+                await MainActor.run {
+                    self.alertType = .genericError(localization: self.localization)
+                    self.documentLoadingState = .failed
                 }
             }
         }
@@ -122,8 +144,8 @@ private extension PDFViewModel {
     
     private func loadDocumentFromLoaderOrCache(url: URL) {
         // Check if document is already loaded in the loader
-        if let data = loader.data, let document = PDFDocument(data: data) {
-            self.pdfDocument = document
+        if case .loaded(let data) = self.loader.loadingState, let document = PDFDocument(data: data) {
+            self.documentLoadingState = .loaded(document)
 
             // Cache it with the stable identifier
             let stableIdentifier = extractStableIdentifier(from: url)
@@ -138,7 +160,7 @@ private extension PDFViewModel {
             let documentCacheKey = stableIdentifier + ":document"
             
             if let cachedData = AttachmentCache.shared.data(for: documentCacheKey), let document = PDFDocument(data: cachedData) {
-                self.pdfDocument = document
+                self.documentLoadingState = .loaded(document)
             }
         }
     }
@@ -170,11 +192,12 @@ private extension PDFViewModel {
         }
         
         // 2. Check if we already have the data in loader
-        if let data = loader.data, let document = PDFDocument(data: data), let page = document.page(at: .zero) {
+        if case .loaded(let data) = self.loader.loadingState, let document = PDFDocument(data: data), let page = document.page(at: .zero) {
             let thumbnail = page.thumbnail(
                 of: CGSize(width: Self.thumbnailDimension, height: Self.thumbnailDimension),
                 for: .artBox
             )
+            
             // Cache the thumbnail
             if let data = thumbnail.pngData() {
                 AttachmentCache.shared.set(data, for: cacheKey)
@@ -194,6 +217,7 @@ private extension PDFViewModel {
                     of: CGSize(width: Self.thumbnailDimension, height: Self.thumbnailDimension),
                     for: .artBox
                 )
+                
                 // 4. Cache the thumbnail as PNG data
                 if let data = thumbnail.pngData() {
                     AttachmentCache.shared.set(data, for: cacheKey)
@@ -213,7 +237,7 @@ private extension PDFViewModel {
         let documentCacheKey = stableIdentifier + ":document"
         
         // Try to load from data in loader first
-        if let data = loader.data, let document = PDFDocument(data: data) {
+        if case .loaded(let data) = self.loader.loadingState, let document = PDFDocument(data: data) {
             // Also cache it for future use
             if let dataRep = document.dataRepresentation() {
                 AttachmentCache.shared.set(dataRep, for: documentCacheKey)
