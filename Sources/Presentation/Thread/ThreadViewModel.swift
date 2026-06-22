@@ -805,9 +805,6 @@ private extension ThreadViewModel {
         } else if let positionInQueue = thread.positionInQueue, thread.assignedAgent == nil {
             // Set position in queue if it's set but no agent is assigned
             self.positionInQueue = positionInQueue
-        } else if thread.assignedAgent == nil && thread.lastAssignedAgent == nil {
-            // No agent assigned yet -> show the position in queue without information about the position in queue
-            self.positionInQueue = .min
         } else {
             // An agent is assigned to the thread, hide the position in queue view
             self.positionInQueue = nil
